@@ -1,5 +1,5 @@
 {
-  "fork": "jrhubott/frontend",
+  "fork": "jrhubott/music-assistant-frontend",
   "upstream": "music-assistant/frontend",
   "base_branch": "main",
   "features": ["feature/light-followers"],
