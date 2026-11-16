@@ -21,6 +21,7 @@ import {
   DSPState,
   type ItemMapping,
   MediaType,
+  PlayerType,
   type StreamDetails,
   VolumeNormalizationMode,
 } from "@/plugins/api/interfaces";
@@ -188,6 +189,52 @@ describe("buildAudioProcessingDetailsDisplay", () => {
     expect(display.outputPaths[0].stages.at(-1)).toMatchObject({
       icon: FileIcon,
     });
+  });
+
+  it("lists the lights that follow the destination", () => {
+    dependencies.players.office.group_members = ["office", "patio-lights"];
+    dependencies.players["patio-lights"] = {
+      player_id: "patio-lights",
+      name: "Patio Music",
+      provider: "sendspin--main",
+      type: PlayerType.LIGHT,
+      active_output_protocol: null,
+      output_protocols: [],
+    };
+
+    const output = buildDisplay({
+      outputs: [
+        audioOutputDetails({
+          player_ids: ["office"],
+          output_format: makeFormat(),
+        }),
+      ],
+    }).outputPaths[0];
+
+    expect(output.followers).toEqual([
+      expect.objectContaining({
+        key: "follower-patio-lights",
+        title: "Patio Music",
+        subtitleParts: [
+          $t("streamdetails.audio_processing.follows", ["Office"]),
+        ],
+      }),
+    ]);
+  });
+
+  it("lists no followers for a speaker without lights", () => {
+    dependencies.players.office.group_members = ["office", "kitchen"];
+
+    const output = buildDisplay({
+      outputs: [
+        audioOutputDetails({
+          player_ids: ["office"],
+          output_format: makeFormat(),
+        }),
+      ],
+    }).outputPaths[0];
+
+    expect(output.followers).toEqual([]);
   });
 
   it("uses the native player provider for direct output", () => {

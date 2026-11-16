@@ -94,10 +94,16 @@
           @navigate="emit('navigate')"
         />
         <AudioProcessingStage
-          :stage="output.destination"
+          v-for="(stage, stageIndex) in [
+            output.destination,
+            ...output.followers,
+          ]"
+          :key="stage.key"
+          :stage="stage"
           :class="{
             'audio-processing-stage--terminal':
-              outputIndex === outputPaths.length - 1,
+              outputIndex === outputPaths.length - 1 &&
+              stageIndex === output.followers.length,
           }"
           @navigate="emit('navigate')"
         />

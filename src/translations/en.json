@@ -1462,6 +1462,7 @@
             "not_bit_perfect": "Processed output",
             "destination_unknown": "Destination {0}",
             "destination_unavailable": "Destination unavailable",
+            "follows": "Lights following {0}",
             "quality": {
                 "low": "Low quality",
                 "standard": "Standard quality",

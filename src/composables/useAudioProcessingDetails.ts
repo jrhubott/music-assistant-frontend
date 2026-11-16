@@ -6,6 +6,7 @@ import {
   File as FileIcon,
   FileAudio,
   Gauge,
+  Lightbulb,
   Merge,
   SlidersHorizontal,
   Speaker,
@@ -46,6 +47,7 @@ import {
   type ItemMapping,
   MediaType,
   type Player,
+  PlayerType,
   Scope,
   type StreamDetails,
   VolumeNormalizationMode,
@@ -96,6 +98,8 @@ export interface AudioProcessingOutputDisplay {
   qualityLabel: string;
   stages: AudioProcessingDisplayStage[];
   destination: AudioProcessingDisplayStage;
+  // lights that follow the destination's audio without being fed by this output
+  followers: AudioProcessingDisplayStage[];
 }
 
 export interface AudioProcessingDetailsDisplay {
@@ -115,7 +119,8 @@ export type AudioProcessingDisplayPlayer = Pick<
   | "provider"
   | "active_output_protocol"
   | "output_protocols"
->;
+> &
+  Partial<Pick<Player, "group_members" | "type">>;
 
 export interface AudioProcessingDetailsDependencies {
   translate: Translate;
@@ -485,7 +490,37 @@ function buildOutputDisplay(
     qualityLabel: audioQualityLabel(output.fidelity.quality, translate),
     stages,
     destination: destinationStage(playerIds, dependencies),
+    followers: followerStages(playerIds, dependencies),
   };
+}
+
+function followerStages(
+  playerIds: string[],
+  dependencies: AudioProcessingDetailsDependencies,
+): AudioProcessingDisplayStage[] {
+  const stages: AudioProcessingDisplayStage[] = [];
+  const seenPlayerIds = new Set<string>();
+  for (const destination of resolveDestinations(playerIds, dependencies)) {
+    const leader = dependencies.players[destination.playerId];
+    for (const memberId of leader?.group_members ?? []) {
+      const member = dependencies.players[memberId];
+      if (member?.type !== PlayerType.LIGHT || seenPlayerIds.has(memberId)) {
+        continue;
+      }
+      seenPlayerIds.add(memberId);
+      stages.push({
+        key: `follower-${memberId}`,
+        icon: Lightbulb,
+        title: dependencies.getPlayerName(member),
+        subtitleParts: [
+          dependencies.translate("streamdetails.audio_processing.follows", [
+            destination.name,
+          ]),
+        ],
+      });
+    }
+  }
+  return stages;
 }
 
 function destinationStage(
