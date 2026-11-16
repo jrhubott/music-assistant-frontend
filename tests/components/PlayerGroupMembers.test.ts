@@ -350,6 +350,33 @@ describe("PlayerGroupMembers", () => {
     ).toEqual(["Kitchen", "players"]);
   });
 
+  it("lists grouped lights apart from the speakers of the group", () => {
+    const light = createPlayer({
+      player_id: "light",
+      name: "Patio Music",
+      type: PlayerType.LIGHT,
+      volume_control: "none",
+      synced_to: "parent",
+    });
+    const parent = createPlayer({
+      group_members: ["parent", light.player_id],
+    });
+    api.players = {
+      [parent.player_id]: parent,
+      [light.player_id]: light,
+    };
+
+    const wrapper = mountGroupMembers(parent, [parent, light], {
+      groupHeading: parent.name,
+    });
+
+    expect(
+      wrapper
+        .findAll(".player-group-section > p")
+        .map((section) => section.text()),
+    ).toEqual(["Kitchen", "lights_in_group"]);
+  });
+
   it("keeps current members visible while filtering candidates", () => {
     const child = createPlayer({
       player_id: "child",

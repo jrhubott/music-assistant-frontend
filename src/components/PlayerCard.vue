@@ -62,10 +62,7 @@
               v-else
               :icon="player.icon"
               :grouped="
-                player.type === PlayerType.PLAYER &&
-                player.group_members.some(
-                  (playerId) => playerId !== player.player_id,
-                )
+                player.type === PlayerType.PLAYER && isPlayerGrouped(player)
               "
               :size="24"
               class="opacity-80"
@@ -226,6 +223,10 @@ import {
   getEventPosition,
   useHoldToOpenMenu,
 } from "@/composables/useHoldToOpenMenu";
+import {
+  getAudioGroupMemberIds,
+  isPlayerGrouped,
+} from "@/helpers/player_grouping";
 import { getPlayerMenuItems } from "@/helpers/player_menu_items";
 import { getSetupRequiredPlayerMenuItems } from "@/helpers/player_settings_actions";
 import {
@@ -380,8 +381,8 @@ const groupMemberCount = computed(() =>
 const groupMemberNames = computed(() => {
   if (!props.showGroupMemberNames) return [];
 
-  return [...new Set(props.player.group_members)]
-    .filter((playerId) => playerId !== props.player.player_id)
+  // lights follow the group but are no speakers of it
+  return getAudioGroupMemberIds(props.player)
     .map((playerId) => api.players[playerId])
     .filter(
       (member): member is Player =>

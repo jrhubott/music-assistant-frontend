@@ -37,9 +37,10 @@ import { webPlayer } from "@/plugins/web_player";
 import { user } from "../fixtures/user";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/plugins/api", () => ({
-  api: { players: {}, providerManifests: {} },
-}));
+vi.mock("@/plugins/api", () => {
+  const api = { players: {}, providerManifests: {} };
+  return { api, default: api };
+});
 
 vi.mock("@/plugins/store", () => ({
   store: {

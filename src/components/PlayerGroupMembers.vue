@@ -150,12 +150,28 @@ const candidateSections = computed(() => {
       players: availableCandidates.filter((player) => isScreenPlayer(player)),
     },
   ];
-  if (groupedPlayers.length > 0) {
+  // lights in the group get a section of their own: they follow the group's
+  // audio but are no speakers of it
+  const groupedLights = groupedPlayers.filter(
+    (player) => player.type === PlayerType.LIGHT,
+  );
+  const groupedSpeakers = groupedPlayers.filter(
+    (player) => player.type !== PlayerType.LIGHT,
+  );
+  if (groupedLights.length > 0) {
+    sections.unshift({
+      type: "group_lights",
+      label: "lights_in_group",
+      translateLabel: true,
+      players: groupedLights,
+    });
+  }
+  if (groupedSpeakers.length > 0) {
     sections.unshift({
       type: "group",
       label: props.groupHeading ?? getPlayerDisplayName(props.player),
       translateLabel: false,
-      players: groupedPlayers,
+      players: groupedSpeakers,
     });
   }
   return sections.filter((section) => section.players.length > 0);

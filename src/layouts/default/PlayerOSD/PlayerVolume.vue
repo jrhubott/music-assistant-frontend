@@ -185,6 +185,7 @@
 import { Slider } from "@/components/ui/slider";
 import { useUserPreferences } from "@/composables/userPreferences";
 import { deviceInset } from "@/helpers/device";
+import { isPlayerGrouped } from "@/helpers/player_grouping";
 import { getPlayerDisplayName } from "@/helpers/players";
 import { getVolumeIconComponent, truncateString } from "@/helpers/utils";
 import { cn } from "@/lib/utils";
@@ -257,13 +258,7 @@ const hapticsEnabled = getPreference<boolean>("volume_haptics", true);
 
 // --- Player-aware computed properties ---
 
-const isGroup = computed(() =>
-  props.player.type === PlayerType.GROUP
-    ? props.player.group_members.length > 0
-    : props.player.group_members.some(
-        (playerId) => playerId !== props.player.player_id,
-      ),
-);
+const isGroup = computed(() => isPlayerGrouped(props.player));
 
 const useGroupVolume = computed(() => isGroup.value && props.preferGroupVolume);
 

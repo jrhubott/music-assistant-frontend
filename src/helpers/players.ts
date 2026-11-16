@@ -5,6 +5,7 @@ import {
   getLucideIcon,
   PLAYER_ICON_FALLBACK,
 } from "@/helpers/icon";
+import { getAudioGroupMemberIds } from "@/helpers/player_grouping";
 import { truncateString } from "@/helpers/utils";
 import { api } from "@/plugins/api";
 import { getDeviceInfo, getDeviceName } from "@/plugins/api/helpers";
@@ -327,9 +328,10 @@ export const canEditPlayerGroup = function (player: Player): boolean {
   );
 };
 
+/**
+ * Count the speakers of the player's group; lights in the group are no speakers.
+ */
 export const getPlayerGroupMemberCount = function (player: Player): number {
-  const childCount = new Set(
-    player.group_members.filter((playerId) => playerId !== player.player_id),
-  ).size;
+  const childCount = getAudioGroupMemberIds(player).length;
   return player.type === PlayerType.GROUP ? childCount : childCount + 1;
 };

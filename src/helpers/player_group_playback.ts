@@ -1,3 +1,4 @@
+import { getAudioGroupMemberIds } from "@/helpers/player_grouping";
 import { getPlayerDisplayName, isBuiltinPlayer } from "@/helpers/players";
 import api from "@/plugins/api";
 import { resolvePlayerQueue } from "@/plugins/api/helpers";
@@ -130,9 +131,8 @@ function followPlaybackTransfer(
 }
 
 function getAvailableGroupMembers(player: Player): string[] {
-  return player.group_members.filter(
-    (playerId) =>
-      playerId !== player.player_id &&
-      api.players[playerId]?.available === true,
+  // a light renders no audio, so it can never take over the group's playback
+  return getAudioGroupMemberIds(player).filter(
+    (playerId) => api.players[playerId]?.available === true,
   );
 }

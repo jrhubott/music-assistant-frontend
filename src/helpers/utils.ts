@@ -1,3 +1,4 @@
+import { isPlayerGrouped } from "@/helpers/player_grouping";
 import { api } from "@/plugins/api";
 import {
   Artist,
@@ -771,7 +772,7 @@ export const getVolumeIconComponent = function (
   const volume =
     displayVolume !== undefined
       ? displayVolume
-      : player.group_members.length
+      : isPlayerGrouped(player)
         ? (player.group_volume ?? 0)
         : player.volume_level || 0;
 
