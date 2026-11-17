@@ -2,11 +2,7 @@
   "fork": "jrhubott/music-assistant-frontend",
   "upstream": "music-assistant/frontend",
   "base_branch": "main",
-  "features": ["feature/light-followers"],
-  "releases": {
-    "mode": "frontend-pin",
-    "requires_server_path": "music_assistant/controllers/players/grouping_plan.py"
-  },
-  "keep_releases": 3,
+  "edge_branch": "edge",
+  "rebase_features": [],
   "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
 }
