@@ -1742,6 +1742,9 @@ export interface Player {
   // older Home Assistant integration versions.
   group_volume: number | null;
   group_volume_muted: boolean | null;
+  // extra_attributes: extra (scalar) attributes the player publishes; "follows" names the
+  // player a light follows instead of joining its group as a protocol member
+  extra_attributes?: Record<string, string | number | boolean | null>;
   hide_in_ui: boolean;
   // private: the player belongs to a single device (a web/app client) or is an
   // internal anchor; together with hide_in_ui it keeps the player out of the

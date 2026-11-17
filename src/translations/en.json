@@ -3006,6 +3006,8 @@
     "lights": "Lights",
     "players_in_group": "Players in group",
     "lights_in_group": "Lights in group",
+    "light_follows": "follows the audio",
+    "lights_follow_queue_only": "The lights only follow music played from a Music Assistant queue, not a live source such as Spotify Connect, AirPlay or a line-in.",
     "volume": "Volume",
     "grouped_volume": "Grouped volume",
     "player_select": {

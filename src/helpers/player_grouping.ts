@@ -1,5 +1,9 @@
 import api from "@/plugins/api";
-import { type Player, PlayerType } from "@/plugins/api/interfaces";
+import {
+  PlaybackState,
+  type Player,
+  PlayerType,
+} from "@/plugins/api/interfaces";
 
 type PlayerLookup = Record<string, Player | undefined>;
 
@@ -53,4 +57,48 @@ export const isPlayerGrouped = function (
   players: PlayerLookup = api.players,
 ): boolean {
   return getAudioGroupMemberIds(player, players).length > 0;
+};
+
+const ATTR_FOLLOWS = "follows";
+
+/**
+ * Return the id of the player a light follows, if it follows one.
+ *
+ * A follower takes what its leader plays from the leader's own audio instead of
+ * joining a protocol group with it.
+ */
+export const getFollowedPlayerId = function (
+  player: Player | undefined,
+): string | undefined {
+  const value = player?.extra_attributes?.[ATTR_FOLLOWS];
+  return typeof value === "string" && value ? value : undefined;
+};
+
+/**
+ * Return the ids of the lights that follow the player.
+ */
+export const getFollowerIds = function (
+  player: Player,
+  players: PlayerLookup = api.players,
+): string[] {
+  return [...new Set(player.group_members)].filter(
+    (playerId) => getFollowedPlayerId(players[playerId]) === player.player_id,
+  );
+};
+
+/**
+ * Check if the player has followers but plays something they cannot follow.
+ *
+ * Followers read the audio of the queue item the player plays; a live source
+ * (Spotify Connect, an AirPlay receiver, a line-in) has none, so they stay dark.
+ */
+export const followersCannotFollow = function (
+  player: Player,
+  players: PlayerLookup = api.players,
+): boolean {
+  return (
+    player.playback_state === PlaybackState.PLAYING &&
+    !player.current_media?.queue_item_id &&
+    getFollowerIds(player, players).length > 0
+  );
 };

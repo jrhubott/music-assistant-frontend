@@ -9,6 +9,13 @@
       <p class="text-muted-foreground px-2 pt-1 pb-1 text-xs font-medium">
         {{ section.translateLabel ? $t(section.label) : section.label }}
       </p>
+      <p
+        v-if="section.type === GROUP_LIGHTS && lightsCannotFollow"
+        class="text-muted-foreground px-2 pb-1 text-xs"
+        role="note"
+      >
+        {{ $t("lights_follow_queue_only") }}
+      </p>
       <div class="space-y-1">
         <label
           v-for="candidate in section.players"
@@ -33,6 +40,12 @@
           </span>
           <span class="min-w-0 flex-1 truncate text-xs font-medium">
             {{ getPlayerDisplayName(candidate) }}
+            <span
+              v-if="followerIds.has(candidate.player_id)"
+              class="text-muted-foreground font-normal"
+            >
+              · {{ $t("light_follows") }}
+            </span>
           </span>
           <Checkbox
             :id="getCheckboxId(candidate)"
@@ -55,6 +68,10 @@ import PlayerIcon from "@/components/PlayerIcon.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import type { PlayerGroupFilter } from "@/helpers/player_group";
+import {
+  followersCannotFollow,
+  getFollowerIds,
+} from "@/helpers/player_grouping";
 import { requestGroupPlaybackConfirmation } from "@/helpers/player_group_playback";
 import {
   canBeGroupMember,
@@ -84,6 +101,11 @@ const props = withDefaults(
     showSeparator: true,
   },
 );
+
+const GROUP_LIGHTS = "group_lights";
+
+const followerIds = computed(() => new Set(getFollowerIds(props.player)));
+const lightsCannotFollow = computed(() => followersCannotFollow(props.player));
 
 const playersToAdd = ref<string[]>([]);
 const playersToRemove = ref<string[]>([]);
@@ -160,7 +182,7 @@ const candidateSections = computed(() => {
   );
   if (groupedLights.length > 0) {
     sections.unshift({
-      type: "group_lights",
+      type: GROUP_LIGHTS,
       label: "lights_in_group",
       translateLabel: true,
       players: groupedLights,
