@@ -12,6 +12,10 @@ Every day at 04:30 UTC (or from **Actions > Fork sync > Run workflow**) `fork_sy
    `requires_server_path` are skipped.
 3. Keeps the newest 3 `release/*` branches.
 
+Then the `wheel` job builds each current `release/*` branch into a wheel and publishes it
+as the GitHub release `lights-<version>` (moved to the new commit when the branch changes).
+The server fork's image job installs that wheel in place of the frontend the release pins.
+
 A conflict or failing test pushes nothing and fails the run.
 
 Needs a `SYNC_TOKEN` repository secret: a fine-grained token for this fork with

@@ -21,9 +21,11 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      releases: ${{ steps.sync.outputs.releases }}
     steps:
       - name: Check out the sync script
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: tools
 
@@ -46,6 +48,7 @@ jobs:
           git -C repo remote add upstream https://github.com/music-assistant/frontend.git
 
       - name: Sync
+        id: sync
         env:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -53,3 +56,75 @@ jobs:
         run: |
           python3 tools/fork_sync.py --config tools/fork-sync.json --repo-dir repo \
             ${{ inputs.dry_run && '--dry-run' || '' }}
+
+  # Publish each current release branch as an installable wheel: a GitHub release named
+  # lights-<version> on this fork, which the server fork's image pins.
+  wheel:
+    needs: sync
+    if: ${{ !cancelled() && needs.sync.outputs.releases != '' && needs.sync.outputs.releases != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJSON(needs.sync.outputs.releases) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ matrix.release.tag }}
+      SHA: ${{ matrix.release.sha }}
+      BRANCH: ${{ matrix.release.branch }}
+      RELEASE: lights-${{ matrix.release.tag }}
+    steps:
+      - name: Check for a wheel of this commit
+        id: existing
+        run: |
+          body=$(gh release view "$RELEASE" -R "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null || true)
+          if grep -q "$SHA" <<< "$body"; then
+            echo "$RELEASE already holds the wheel of $SHA"
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the release branch
+        if: steps.existing.outputs.current != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.release.sha }}
+
+      - name: Install pnpm
+        if: steps.existing.outputs.current != 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.8.0
+
+      - name: Use Node.js
+        if: steps.existing.outputs.current != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.x"
+          cache: pnpm
+
+      - name: Build the wheel
+        if: steps.existing.outputs.current != 'true'
+        env:
+          NODE_OPTIONS: --max_old_space_size=6144
+        run: |
+          sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" pyproject.toml
+          grep -q "^version = \"$VERSION\"" pyproject.toml
+          pnpm install --frozen-lockfile
+          pnpm build
+          pipx run build --wheel
+          ls dist/music_assistant_frontend-"$VERSION"-py3-none-any.whl
+
+      - name: Publish the release
+        if: steps.existing.outputs.current != 'true'
+        run: |
+          wheel="dist/music_assistant_frontend-$VERSION-py3-none-any.whl"
+          sha256=$(sha256sum "$wheel" | cut -d' ' -f1)
+          notes=$(printf 'Music Assistant frontend %s with the light-follow feature, built from `%s` (%s).\n\nsha256: `%s`\n' \
+            "$VERSION" "$BRANCH" "$SHA" "$sha256")
+          # the tag has to move to the new commit, so the release is made again
+          gh release delete "$RELEASE" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$RELEASE" "$wheel" -R "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "Frontend $VERSION + light follow" --notes "$notes" --latest=false
