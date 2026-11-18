@@ -9,6 +9,11 @@ on:
         description: "Dry run: push nothing"
         type: boolean
         default: false
+      target:
+        description: "Branch to sync"
+        type: choice
+        options: [all, edge, stable]
+        default: all
 
 concurrency:
   group: fork-sync
@@ -19,6 +24,12 @@ permissions:
 
 jobs:
   sync:
+    strategy:
+      fail-fast: false
+      matrix:
+        # a scheduled run (no inputs) and "all" sync both branches
+        target: ${{ fromJSON((inputs.target == '' || inputs.target == 'all') && '["edge","stable"]' || format('["{0}"]', inputs.target)) }}
+    name: sync (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -53,4 +64,4 @@ jobs:
           CI: true
         run: |
           python3 tools/fork_sync.py --config tools/fork-sync.json --repo-dir repo \
-            ${{ inputs.dry_run && '--dry-run' || '' }}
+            --target ${{ matrix.target }} ${{ inputs.dry_run && '--dry-run' || '' }}

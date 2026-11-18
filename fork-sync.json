@@ -1,8 +1,18 @@
 {
   "fork": "jrhubott/music-assistant-frontend",
   "upstream": "music-assistant/frontend",
-  "base_branch": "main",
-  "edge_branch": "edge",
-  "rebase_features": [],
-  "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
+  "targets": [
+    {
+      "edge_branch": "edge",
+      "base_branch": "main",
+      "rebase_features": [],
+      "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
+    },
+    {
+      "edge_branch": "stable",
+      "base_branch": "stable",
+      "rebase_features": [],
+      "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
+    }
+  ]
 }
