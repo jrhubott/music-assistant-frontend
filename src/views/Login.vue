@@ -453,6 +453,12 @@ import {
 } from "@/helpers/guest_session";
 import { sanitizeDashboardViewerPath } from "@/helpers/dashboard_viewer_access";
 import {
+  clearDashboardKiosk,
+  getDashboardKiosk,
+  isDashboardKioskLink,
+  saveDashboardKiosk,
+} from "@/helpers/dashboard_kiosk";
+import {
   canReturnExternalLogin,
   type ExternalLoginResult,
   getExternalLoginReturnPath,
@@ -931,6 +937,7 @@ function restoreGuestSessionEnded(): boolean {
 
 const dismissGuestSessionEnded = () => {
   clearGuestSessionEnded();
+  clearDashboardKiosk();
   guestSessionEndedKind.value = null;
   authManager.returnToFullApp();
 };
@@ -1135,7 +1142,14 @@ const autoConnect = async () => {
   // Guest code is the short code (e.g., "ABCD1234") exchanged for JWT
   const urlJoinCode = urlParams.get("join");
   // Dashboard code: same short-code exchange as a guest join, but for a Chromecast dashboard session; carries its own destination route.
-  const urlDashboardCode = urlParams.get("dashboard");
+  // A TV link remembered by this browser stands in for a dashboard code in the
+  // URL, so the screen signs itself in again after its viewer token ends.
+  const storedKiosk =
+    urlRemoteId || urlJoinCode || urlParams.get("dashboard")
+      ? null
+      : getDashboardKiosk();
+  const urlDashboardCode = urlParams.get("dashboard") || storedKiosk?.code;
+  const dashboardPath = storedKiosk ? storedKiosk.path : urlParams.get("path");
 
   // A guest session the server ended has nothing left to auto-connect with, so
   // keep explaining that instead of falling through to the sign-in form. A fresh
@@ -1378,11 +1392,17 @@ const autoConnect = async () => {
         emit("local-connect", address);
 
         if (await waitForApiConnection()) {
-          if (
-            await completeDashboardAuth(urlDashboardCode, urlParams.get("path"))
-          ) {
+          if (await completeDashboardAuth(urlDashboardCode, dashboardPath)) {
+            if (isDashboardKioskLink(urlParams)) {
+              saveDashboardKiosk({
+                code: urlDashboardCode,
+                path: dashboardPath,
+              });
+            }
             return; // Success - App.vue will take over
           }
+          // a revoked or replaced TV link must not keep retrying
+          clearDashboardKiosk();
         }
 
         connectionError.value = t(
