@@ -40,6 +40,7 @@
           'party-content--light-text': useLightChrome,
         },
       ]"
+      :style="{ '--party-leaderboard-space': `${leaderboardSpace}px` }"
     >
       <!-- Topbar -->
       <div
@@ -140,6 +141,12 @@
           :style="swapped ? { left: 'auto', right: '2vw' } : undefined"
         >
           <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
+          <PartyTipCaption
+            :guest-access="qrAvailable"
+            :queue-empty="queueEmpty"
+            :light-text="useLightChrome"
+            compact
+          />
         </div>
 
         <div
@@ -217,7 +224,17 @@
             class="qr-wrapper"
             :style="swapped && displayLyrics ? { order: 1 } : undefined"
           >
-            <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
+            <div class="qr-wrapper__code">
+              <PartyQR
+                :qr-dark="qrDarkColor"
+                @available="qrAvailable = $event"
+              />
+            </div>
+            <PartyTipCaption
+              :guest-access="qrAvailable"
+              :queue-empty="queueEmpty"
+              :light-text="useLightChrome"
+            />
           </div>
           <div
             v-if="displayLyrics"
@@ -289,14 +306,14 @@
         </div>
       </template>
     </div>
-    <!-- Reactions, request animations, tips and the leaderboard -->
+    <!-- Reactions, request animations and the leaderboard -->
     <PartyScreenExtras
       v-if="!accessError"
       :party-instance-id="partyInstanceId"
-      :guest-access="qrAvailable"
       :light-text="useLightChrome"
       :request-badge-color="requestBadgeColor"
       :boost-badge-color="boostBadgeColor"
+      @leaderboard-space="leaderboardSpace = $event"
     />
     <div
       class="absolute flex items-center gap-2 opacity-50 font-medium"
@@ -348,6 +365,7 @@
 import ShowDashboardButton from "@/components/ShowDashboardButton.vue";
 import LyricsViewer from "@/components/LyricsViewer.vue";
 import PartyQR from "@/components/party/PartyQR.vue";
+import PartyTipCaption from "@/components/party/PartyTipCaption.vue";
 import PartyScreenExtras from "@/components/party/PartyScreenExtras.vue";
 import VisualizerCanvas from "@/components/VisualizerCanvas.vue";
 import PartyTrackCard from "@/components/party/PartyTrackCard.vue";
@@ -424,6 +442,7 @@ const refreshPartyPlayer = async () => {
 
 const qrAvailable = ref(true); // Optimistic default; PartyQR emits false if guest access disabled
 const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown whenever karaoke mode is on
+const leaderboardSpace = ref(0); // px the corner leaderboard takes from the bottom
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
 const antiBurnIn = ref(false); // Swap QR/track sides periodically
@@ -1053,14 +1072,26 @@ watch(
   justify-content: center;
   align-self: center;
   height: 60vh;
+  /* keep the QR and its tip clear of the leaderboard in the corner below */
+  max-height: calc(100% - var(--party-leaderboard-space, 0px));
+  margin-bottom: var(--party-leaderboard-space, 0px);
 }
 
 .qr-wrapper {
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.5vh;
+}
+
+/* the QR sizes itself to this box, so it shrinks to leave the tip room */
+.qr-wrapper__code {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 .qr-section--with-lyrics {
@@ -1180,6 +1211,10 @@ watch(
   left: 2vw;
   z-index: 6;
   max-width: 20vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
 }
 
 .karaoke-qr :deep(.qr-display) {
