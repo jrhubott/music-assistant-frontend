@@ -165,6 +165,7 @@
             :lrc-lyrics="currentLyrics.synced"
             :anticipation="10"
             :highlight-ahead="highlightAhead"
+            word-highlight
           />
         </div>
 
@@ -233,6 +234,7 @@
               :lrc-lyrics="currentLyrics.synced"
               :highlight-ahead="highlightAhead"
               :text-color="lyricsTextColor"
+              word-highlight
             />
           </div>
         </div>

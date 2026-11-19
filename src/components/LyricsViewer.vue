@@ -51,7 +51,14 @@
           ]"
         >
           <!-- Lyric text -->
-          <template v-if="!line.isBreak">
+          <LyricsWordLine
+            v-if="showWords && activeLyricIndex === index && line.words?.length"
+            :words="line.words"
+            :position="effectivePosition ?? 0"
+            :sung-color="textColor"
+            :unsung-color="unsungNoteColor"
+          />
+          <template v-else-if="!line.isBreak">
             {{ line.text }}
           </template>
           <!-- Musical break notes -->
@@ -101,9 +108,15 @@
 </template>
 
 <script setup lang="ts">
+import LyricsWordLine from "@/components/LyricsWordLine.vue";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { parseLrcLine } from "@/helpers/lrcParser";
+import {
+  type LyricWord,
+  stripWordStamps,
+  timeLyricWords,
+} from "@/helpers/lyricWordTiming";
 import {
   MediaType,
   PlayableMediaItemType,
@@ -119,6 +132,7 @@ interface DisplayLine {
   text: string;
   isBreak: boolean;
   breakEnd?: number;
+  words?: LyricWord[];
 }
 
 interface Props {
@@ -133,6 +147,8 @@ interface Props {
   highlightAhead?: boolean;
   offset?: number;
   syncDisabled?: boolean;
+  /** Fill the active line word by word, karaoke style. */
+  wordHighlight?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -147,6 +163,7 @@ const props = withDefaults(defineProps<Props>(), {
   highlightAhead: true,
   offset: 0,
   syncDisabled: false,
+  wordHighlight: false,
 });
 
 // A podcast transcript is prose to read rather than lyrics to sing along to, so
@@ -156,6 +173,11 @@ const isTranscript = computed(
     !!props.mediaItem &&
     "media_type" in props.mediaItem &&
     props.mediaItem.media_type === MediaType.PODCAST_EPISODE,
+);
+
+// A transcript is read, not sung along to, so it keeps whole-line highlighting.
+const showWords = computed(
+  () => props.wordHighlight && !isTranscript.value && !props.syncDisabled,
 );
 
 // Older Cast and Android TV runtimes have no color-mix(), and an unsupported
@@ -281,6 +303,11 @@ const fetchLyrics = () => {
         .split("\n")
         .filter((line) => line.trim())
         .map((line) => parseLrcLine(line))
+        .map((line) => ({
+          ...line,
+          rawText: line.text,
+          text: stripWordStamps(line.text),
+        }))
         .sort((a, b) => a.time - b.time);
 
       // Collect break markers (empty timestamped lines)
@@ -295,7 +322,7 @@ const fetchLyrics = () => {
       const contentLines = allParsed.filter((line) => line.text.trim());
 
       // Build the unified display array with breaks interleaved
-      const lines: DisplayLine[] = [];
+      const lines: (DisplayLine & { rawText?: string })[] = [];
 
       // Intro break: if the first lyric starts late enough, add a
       // countdown break so the singer knows lyrics are coming. A transcript is
@@ -317,6 +344,7 @@ const fetchLyrics = () => {
         lines.push({
           time: contentLines[i].time,
           text: contentLines[i].text,
+          rawText: contentLines[i].rawText,
           isBreak: false,
         });
 
@@ -347,7 +375,16 @@ const fetchLyrics = () => {
         }
       }
 
-      displayLines.value = lines;
+      // A line's words are sung before whatever comes next, lyric or break.
+      displayLines.value = lines.map(({ rawText, ...line }, i) =>
+        line.isBreak || rawText === undefined
+          ? line
+          : {
+              ...line,
+              words: timeLyricWords(rawText, line.time, lines[i + 1]?.time)
+                .words,
+            },
+      );
     } else if (lyricsToProcess) {
       displayLines.value = lyricsToProcess
         .split("\n")
