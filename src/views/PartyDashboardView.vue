@@ -166,6 +166,7 @@
             :anticipation="10"
             :highlight-ahead="highlightAhead"
             word-highlight
+            break-cue
           />
         </div>
 
@@ -235,6 +236,7 @@
               :highlight-ahead="highlightAhead"
               :text-color="lyricsTextColor"
               word-highlight
+              break-cue
             />
           </div>
         </div>

@@ -47,9 +47,15 @@
                 activeLyricIndex >= 0
                   ? index < activeLyricIndex - 1 || index > activeLyricIndex + 2
                   : index > 2,
+              'lyrics-line--cued': cue?.index === index,
             },
           ]"
         >
+          <LyricsBreakCue
+            v-if="cue?.index === index"
+            :seconds-left="cue.secondsLeft"
+            :color="textColor"
+          />
           <!-- Lyric text -->
           <LyricsWordLine
             v-if="showWords && activeLyricIndex === index && line.words?.length"
@@ -108,9 +114,11 @@
 </template>
 
 <script setup lang="ts">
+import LyricsBreakCue from "@/components/LyricsBreakCue.vue";
 import LyricsWordLine from "@/components/LyricsWordLine.vue";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
+import { findBreakCue } from "@/helpers/lyricBreakCue";
 import { parseLrcLine } from "@/helpers/lrcParser";
 import {
   type LyricWord,
@@ -149,6 +157,8 @@ interface Props {
   syncDisabled?: boolean;
   /** Fill the active line word by word, karaoke style. */
   wordHighlight?: boolean;
+  /** Count down the last seconds before a line that follows a musical break. */
+  breakCue?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -164,6 +174,7 @@ const props = withDefaults(defineProps<Props>(), {
   offset: 0,
   syncDisabled: false,
   wordHighlight: false,
+  breakCue: false,
 });
 
 // A podcast transcript is prose to read rather than lyrics to sing along to, so
@@ -178,6 +189,13 @@ const isTranscript = computed(
 // A transcript is read, not sung along to, so it keeps whole-line highlighting.
 const showWords = computed(
   () => props.wordHighlight && !isTranscript.value && !props.syncDisabled,
+);
+
+// Counts down to the singing itself, not to the earlier highlight handoff.
+const cue = computed(() =>
+  props.breakCue && !props.syncDisabled && effectivePosition.value !== undefined
+    ? findBreakCue(displayLines.value, effectivePosition.value)
+    : null,
 );
 
 // Older Cast and Android TV runtimes have no color-mix(), and an unsupported
@@ -621,6 +639,7 @@ onBeforeUnmount(() => {
 }
 
 .lyrics-line {
+  position: relative;
   padding: 10px 4px;
   font-size: clamp(2rem, 4vw, 4rem);
   font-weight: bold;
@@ -631,6 +650,11 @@ onBeforeUnmount(() => {
   transition:
     opacity v-bind(transitionDuration) ease,
     color v-bind(transitionDuration) ease;
+}
+
+/* the line about to be sung after a break comes forward with its countdown */
+.lyrics-line.lyrics-line--cued {
+  opacity: 0.75;
 }
 
 .lyrics-line.lyrics-line--far {

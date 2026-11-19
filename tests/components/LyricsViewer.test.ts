@@ -62,3 +62,30 @@ describe("LyricsViewer word highlight", () => {
     expect(wrapper.find(".lyrics-line.active").text()).toBe("one two three");
   });
 });
+
+describe("LyricsViewer break cue", () => {
+  // an instrumental from 2s, marked by the empty line, until the line at 10s
+  const BREAK_LRC = "[00:01.00]before\n[00:02.00]\n[00:10.00]after the break";
+
+  const mountCue = async (breakCue: boolean) => {
+    const wrapper = mount(LyricsViewer, {
+      props: { lrcLyrics: BREAK_LRC, breakCue, position: 0 },
+    });
+    await wrapper.setProps({ position: 8.5 });
+    await nextTick();
+    return wrapper;
+  };
+
+  it("counts down the line after the break", async () => {
+    const wrapper = await mountCue(true);
+    const cued = wrapper.find(".lyrics-line--cued");
+    expect(cued.text()).toBe("after the break");
+    expect(cued.findAll(".lyrics-cue__dot")).toHaveLength(3);
+    expect(cued.findAll(".lyrics-cue__dot--lit")).toHaveLength(2);
+  });
+
+  it("shows no countdown without the prop", async () => {
+    const wrapper = await mountCue(false);
+    expect(wrapper.find(".lyrics-cue").exists()).toBe(false);
+  });
+});
