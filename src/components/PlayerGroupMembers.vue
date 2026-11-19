@@ -35,10 +35,16 @@
               :icon="candidate.icon"
               :size="18"
               class="text-muted-foreground"
-              :class="{ 'opacity-50': candidate.powered === false }"
+              :class="{
+                'opacity-50':
+                  candidate.powered === false || !candidate.available,
+              }"
             />
           </span>
-          <span class="min-w-0 flex-1 truncate text-xs font-medium">
+          <span
+            class="min-w-0 flex-1 truncate text-xs font-medium"
+            :class="{ 'text-muted-foreground': !candidate.available }"
+          >
             {{ getPlayerDisplayName(candidate) }}
             <span
               v-if="followerIds.has(candidate.player_id)"
@@ -47,6 +53,12 @@
               · {{ $t("light_follows") }}
             </span>
           </span>
+          <PlayerStatusIcon
+            :enabled="true"
+            :unavailable="!candidate.available"
+            :reason="getPlayerSetupReason(candidate)"
+            class="size-4"
+          />
           <Checkbox
             :id="getCheckboxId(candidate)"
             :model-value="isGroupMember(candidate)"
@@ -65,6 +77,7 @@
 
 <script setup lang="ts">
 import PlayerIcon from "@/components/PlayerIcon.vue";
+import PlayerStatusIcon from "@/components/settings/players/PlayerStatusIcon.vue";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import type { PlayerGroupFilter } from "@/helpers/player_group";
@@ -76,6 +89,7 @@ import { requestGroupPlaybackConfirmation } from "@/helpers/player_group_playbac
 import {
   canBeGroupMember,
   getPlayerDisplayName,
+  getPlayerSetupReason,
   groupMemberPickerVisible,
   isScreenPlayer,
 } from "@/helpers/players";

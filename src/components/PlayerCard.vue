@@ -61,9 +61,7 @@
             <PlayerIcon
               v-else
               :icon="player.icon"
-              :grouped="
-                player.type === PlayerType.PLAYER && isPlayerGrouped(player)
-              "
+              :grouped="isSpeakerPlayer(player) && isPlayerGrouped(player)"
               :size="24"
               class="opacity-80"
             />
@@ -236,6 +234,7 @@ import {
   getPlayerName,
   getPlayerSetupReason,
   isBuiltinPlayer,
+  isSpeakerPlayer,
 } from "@/helpers/players";
 import { isQueueEnded } from "@/helpers/queue_position";
 import { getMediaImageUrl } from "@/helpers/utils";
