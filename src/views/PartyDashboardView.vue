@@ -165,6 +165,7 @@
             :lrc-lyrics="currentLyrics.synced"
             :anticipation="10"
             :highlight-ahead="highlightAhead"
+            :offset="lyricsOffset"
           />
         </div>
 
@@ -232,6 +233,7 @@
               :lyrics="currentLyrics.plain"
               :lrc-lyrics="currentLyrics.synced"
               :highlight-ahead="highlightAhead"
+              :offset="lyricsOffset"
               :text-color="lyricsTextColor"
             />
           </div>
@@ -404,6 +406,13 @@ const qrAvailable = ref(true); // Optimistic default; PartyQR emits false if gue
 const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown whenever karaoke mode is on
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
+// The configured lyrics delay, in milliseconds, holds the lyrics back to match
+// speakers that play late; LyricsViewer takes it as a seconds offset forward.
+const MS_PER_SECOND = 1000;
+const lyricsOffset = computed(() => {
+  const delayMs = partyConfig.value?.lyrics_delay ?? 0;
+  return delayMs ? -delayMs / MS_PER_SECOND : 0;
+});
 const antiBurnIn = ref(false); // Swap QR/track sides periodically
 const swapped = ref(false); // Current swap state for anti burn-in
 let burnInInterval: ReturnType<typeof setInterval> | null = null;
