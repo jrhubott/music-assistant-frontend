@@ -376,15 +376,20 @@ const fetchLyrics = () => {
       }
 
       // A line's words are sung before whatever comes next, lyric or break.
-      displayLines.value = lines.map(({ rawText, ...line }, i) =>
-        line.isBreak || rawText === undefined
-          ? line
-          : {
-              ...line,
-              words: timeLyricWords(rawText, line.time, lines[i + 1]?.time)
-                .words,
-            },
-      );
+      // They finish when the next line takes over the highlight, which is
+      // the lead time before its timestamp, so the fill is never cut short.
+      displayLines.value = lines.map(({ rawText, ...line }, i) => {
+        if (line.isBreak || rawText === undefined) return line;
+        const next = lines[i + 1]?.time;
+        const handoff =
+          next === undefined
+            ? undefined
+            : Math.max(line.time, next - highlightLeadTime.value);
+        return {
+          ...line,
+          words: timeLyricWords(rawText, line.time, handoff).words,
+        };
+      });
     } else if (lyricsToProcess) {
       displayLines.value = lyricsToProcess
         .split("\n")
@@ -466,7 +471,13 @@ const computeTranslateY = (index: number) => {
 
 // Watch for lyrics data changes
 watch(
-  [() => props.mediaItem?.item_id, () => props.lyrics, () => props.lrcLyrics],
+  [
+    () => props.mediaItem?.item_id,
+    () => props.lyrics,
+    () => props.lrcLyrics,
+    // the word timing ends each line at the highlight handoff
+    () => props.highlightAhead,
+  ],
   () => {
     activeLyricIndex.value = -1;
     contentTranslateY.value = 99999;
@@ -616,7 +627,10 @@ onBeforeUnmount(() => {
   opacity: 0.35;
   margin: 8px 0;
   will-change: opacity;
-  transition: opacity v-bind(transitionDuration) ease;
+  /* color fades too, so a fully sung line eases out of the word fill colors */
+  transition:
+    opacity v-bind(transitionDuration) ease,
+    color v-bind(transitionDuration) ease;
 }
 
 .lyrics-line.lyrics-line--far {
