@@ -6,30 +6,32 @@
       :request-badge-color="requestBadgeColor"
       :boost-badge-color="boostBadgeColor"
     />
-    <PartyInfoTicker
-      :tips="tips"
+    <PartyLeaderboard
+      v-if="config?.show_leaderboard"
       :leaderboard="leaderboard"
-      :show-leaderboard="config?.show_leaderboard ?? false"
       :light-text="lightText"
+      @space="emit('leaderboard-space', $event)"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import PartyInfoTicker from "@/components/party/PartyInfoTicker.vue";
+import PartyLeaderboard from "@/components/party/PartyLeaderboard.vue";
 import PartyReactionLayer from "@/components/party/PartyReactionLayer.vue";
 import PartyRequestBanner from "@/components/party/PartyRequestBanner.vue";
 import { usePartyScreenEvents } from "@/composables/party/usePartyScreenEvents";
 import { usePartyConfig } from "@/composables/usePartyConfig";
-import { partyTips } from "@/helpers/party_tips";
-import { computed, toRef, useTemplateRef } from "vue";
+import { toRef, useTemplateRef } from "vue";
 
 const props = defineProps<{
   partyInstanceId: string | undefined;
-  guestAccess: boolean;
   lightText: boolean;
   requestBadgeColor: string;
   boostBadgeColor: string;
+}>();
+
+const emit = defineEmits<{
+  "leaderboard-space": [px: number];
 }>();
 
 const { config } = usePartyConfig();
@@ -46,6 +48,4 @@ const { leaderboard } = usePartyScreenEvents(toRef(props, "partyInstanceId"), {
     }
   },
 });
-
-const tips = computed(() => partyTips(config.value, props.guestAccess));
 </script>
