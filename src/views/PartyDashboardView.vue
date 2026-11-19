@@ -169,13 +169,14 @@
         </div>
 
         <div class="karaoke-track-stack">
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state empty-state--karaoke"
-          >
+          <div v-if="queueEmpty" class="empty-state empty-state--karaoke">
             <Music :size="60" class="empty-icon" />
             <h2 class="empty-title">
-              {{ $t("providers.party.nothing_playing") }}
+              {{
+                qrAvailable
+                  ? $t("providers.party.empty_queue_message")
+                  : $t("providers.party.nothing_playing")
+              }}
             </h2>
           </div>
           <TransitionGroup
@@ -202,7 +203,7 @@
       <template v-else>
         <!-- QR Code and Lyrics -->
         <div
-          v-show="qrAvailable || displayLyrics"
+          v-show="(qrAvailable && !queueEmpty) || displayLyrics"
           :class="[
             'qr-section',
             {
@@ -242,11 +243,22 @@
           class="track-stack"
           :style="swapped && !displayLyrics ? { order: -1 } : undefined"
         >
-          <!-- Empty State -->
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state"
-          >
+          <!-- Empty State: with guest access, invite guests to pick the first song -->
+          <div v-if="queueEmpty && qrAvailable" class="empty-state">
+            <h2 class="empty-title">
+              {{ $t("providers.party.empty_queue_title") }}
+            </h2>
+            <p class="empty-message">
+              {{ $t("providers.party.empty_queue_message") }}
+            </p>
+            <div class="empty-qr">
+              <PartyQR
+                :qr-dark="qrDarkColor"
+                @available="qrAvailable = $event"
+              />
+            </div>
+          </div>
+          <div v-else-if="queueEmpty" class="empty-state">
             <Music :size="120" class="empty-icon" />
             <h2 class="empty-title">
               {{ $t("providers.party.nothing_playing") }}
@@ -277,6 +289,15 @@
         </div>
       </template>
     </div>
+    <!-- Reactions, request animations, tips and the leaderboard -->
+    <PartyScreenExtras
+      v-if="!accessError"
+      :party-instance-id="partyInstanceId"
+      :guest-access="qrAvailable"
+      :light-text="useLightChrome"
+      :request-badge-color="requestBadgeColor"
+      :boost-badge-color="boostBadgeColor"
+    />
     <div
       class="absolute flex items-center gap-2 opacity-50 font-medium"
       :style="{
@@ -327,6 +348,7 @@
 import ShowDashboardButton from "@/components/ShowDashboardButton.vue";
 import LyricsViewer from "@/components/LyricsViewer.vue";
 import PartyQR from "@/components/party/PartyQR.vue";
+import PartyScreenExtras from "@/components/party/PartyScreenExtras.vue";
 import VisualizerCanvas from "@/components/VisualizerCanvas.vue";
 import PartyTrackCard from "@/components/party/PartyTrackCard.vue";
 import {
@@ -630,6 +652,10 @@ const visibleItems = computed(() => {
 
   return items;
 });
+
+const queueEmpty = computed(
+  () => !store.curQueueItem && !visibleItems.value.length,
+);
 
 // Helper to compute position for each item
 const getPosition = (item: QueueItem) => {
@@ -1115,6 +1141,12 @@ watch(
   font-weight: 600;
   margin-bottom: 1rem;
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.empty-qr {
+  width: min(70vh, 90%);
+  height: 55vh;
+  margin-top: 1vh;
 }
 
 .empty-message {
