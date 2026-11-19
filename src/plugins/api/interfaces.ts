@@ -2367,6 +2367,8 @@ export interface PartyConfig {
   skip_votes_required: number;
   karaoke_mode: boolean;
   highlight_ahead: boolean;
+  // Milliseconds the dashboard lyrics are held back to match speakers that play late
+  lyrics_delay: number;
   request_badge_color?: string;
   boost_badge_color?: string;
   anti_burn_in: boolean;

@@ -125,6 +125,7 @@ describe("useRateLimiting", () => {
       skip_votes_required: 1,
       karaoke_mode: false,
       highlight_ahead: true,
+      lyrics_delay: 0,
       request_badge_color: "#000000",
       boost_badge_color: "#ffffff",
       anti_burn_in: false,
