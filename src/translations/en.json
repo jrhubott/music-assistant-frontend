@@ -2001,6 +2001,10 @@
             "empty_queue_message": "Scan the code and pick the first song!",
             "tips": {
                 "scan": "Scan the QR code to add a song",
+                "karaoke": "Lyrics are up. Grab someone and sing along",
+                "silent_disco": "Silent disco: put your headphones on and listen from your phone",
+                "request_refill": "Out of requests? They refill every {0} min",
+                "skip_votes": "It takes {0} votes to skip a song",
                 "nickname": "Pick a nickname and climb the Top DJs board",
                 "boost": "Got a must-hear song? Boost it to play next",
                 "shout_out": "Add a shout-out to your request and it shows here while it plays",
