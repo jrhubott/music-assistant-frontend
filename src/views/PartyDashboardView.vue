@@ -40,6 +40,7 @@
           'party-content--light-text': useLightChrome,
         },
       ]"
+      :style="{ '--party-leaderboard-space': `${leaderboardSpace}px` }"
     >
       <!-- Topbar -->
       <div
@@ -140,6 +141,12 @@
           :style="swapped ? { left: 'auto', right: '2vw' } : undefined"
         >
           <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
+          <PartyTipCaption
+            :guest-access="qrAvailable"
+            :queue-empty="queueEmpty"
+            :light-text="useLightChrome"
+            compact
+          />
         </div>
 
         <div
@@ -165,17 +172,21 @@
             :lrc-lyrics="currentLyrics.synced"
             :anticipation="10"
             :highlight-ahead="highlightAhead"
+            :offset="lyricsOffset"
+            word-highlight
+            break-cue
           />
         </div>
 
         <div class="karaoke-track-stack">
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state empty-state--karaoke"
-          >
+          <div v-if="queueEmpty" class="empty-state empty-state--karaoke">
             <Music :size="60" class="empty-icon" />
             <h2 class="empty-title">
-              {{ $t("providers.party.nothing_playing") }}
+              {{
+                qrAvailable
+                  ? $t("providers.party.empty_queue_message")
+                  : $t("providers.party.nothing_playing")
+              }}
             </h2>
           </div>
           <TransitionGroup
@@ -202,7 +213,7 @@
       <template v-else>
         <!-- QR Code and Lyrics -->
         <div
-          v-show="qrAvailable || displayLyrics"
+          v-show="(qrAvailable && !queueEmpty) || displayLyrics"
           :class="[
             'qr-section',
             {
@@ -216,7 +227,17 @@
             class="qr-wrapper"
             :style="swapped && displayLyrics ? { order: 1 } : undefined"
           >
-            <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
+            <div class="qr-wrapper__code">
+              <PartyQR
+                :qr-dark="qrDarkColor"
+                @available="qrAvailable = $event"
+              />
+            </div>
+            <PartyTipCaption
+              :guest-access="qrAvailable"
+              :queue-empty="queueEmpty"
+              :light-text="useLightChrome"
+            />
           </div>
           <div
             v-if="displayLyrics"
@@ -232,7 +253,10 @@
               :lyrics="currentLyrics.plain"
               :lrc-lyrics="currentLyrics.synced"
               :highlight-ahead="highlightAhead"
+              :offset="lyricsOffset"
               :text-color="lyricsTextColor"
+              word-highlight
+              break-cue
             />
           </div>
         </div>
@@ -242,11 +266,22 @@
           class="track-stack"
           :style="swapped && !displayLyrics ? { order: -1 } : undefined"
         >
-          <!-- Empty State -->
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state"
-          >
+          <!-- Empty State: with guest access, invite guests to pick the first song -->
+          <div v-if="queueEmpty && qrAvailable" class="empty-state">
+            <h2 class="empty-title">
+              {{ $t("providers.party.empty_queue_title") }}
+            </h2>
+            <p class="empty-message">
+              {{ $t("providers.party.empty_queue_message") }}
+            </p>
+            <div class="empty-qr">
+              <PartyQR
+                :qr-dark="qrDarkColor"
+                @available="qrAvailable = $event"
+              />
+            </div>
+          </div>
+          <div v-else-if="queueEmpty" class="empty-state">
             <Music :size="120" class="empty-icon" />
             <h2 class="empty-title">
               {{ $t("providers.party.nothing_playing") }}
@@ -277,6 +312,15 @@
         </div>
       </template>
     </div>
+    <!-- Reactions, request animations and the leaderboard -->
+    <PartyScreenExtras
+      v-if="!accessError"
+      :party-instance-id="partyInstanceId"
+      :light-text="useLightChrome"
+      :request-badge-color="requestBadgeColor"
+      :boost-badge-color="boostBadgeColor"
+      @leaderboard-space="leaderboardSpace = $event"
+    />
     <div
       class="absolute flex items-center gap-2 opacity-50 font-medium"
       :style="{
@@ -327,6 +371,8 @@
 import ShowDashboardButton from "@/components/ShowDashboardButton.vue";
 import LyricsViewer from "@/components/LyricsViewer.vue";
 import PartyQR from "@/components/party/PartyQR.vue";
+import PartyTipCaption from "@/components/party/PartyTipCaption.vue";
+import PartyScreenExtras from "@/components/party/PartyScreenExtras.vue";
 import VisualizerCanvas from "@/components/VisualizerCanvas.vue";
 import PartyTrackCard from "@/components/party/PartyTrackCard.vue";
 import {
@@ -402,8 +448,16 @@ const refreshPartyPlayer = async () => {
 
 const qrAvailable = ref(true); // Optimistic default; PartyQR emits false if guest access disabled
 const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown whenever karaoke mode is on
+const leaderboardSpace = ref(0); // px the corner leaderboard takes from the bottom
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
+// The configured lyrics delay, in milliseconds, holds the lyrics back to match
+// speakers that play late; LyricsViewer takes it as a seconds offset forward.
+const MS_PER_SECOND = 1000;
+const lyricsOffset = computed(() => {
+  const delayMs = partyConfig.value?.lyrics_delay ?? 0;
+  return delayMs ? -delayMs / MS_PER_SECOND : 0;
+});
 const antiBurnIn = ref(false); // Swap QR/track sides periodically
 const swapped = ref(false); // Current swap state for anti burn-in
 let burnInInterval: ReturnType<typeof setInterval> | null = null;
@@ -630,6 +684,10 @@ const visibleItems = computed(() => {
 
   return items;
 });
+
+const queueEmpty = computed(
+  () => !store.curQueueItem && !visibleItems.value.length,
+);
 
 // Helper to compute position for each item
 const getPosition = (item: QueueItem) => {
@@ -1027,14 +1085,26 @@ watch(
   justify-content: center;
   align-self: center;
   height: 60vh;
+  /* keep the QR and its tip clear of the leaderboard in the corner below */
+  max-height: calc(100% - var(--party-leaderboard-space, 0px));
+  margin-bottom: var(--party-leaderboard-space, 0px);
 }
 
 .qr-wrapper {
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.5vh;
+}
+
+/* the QR sizes itself to this box, so it shrinks to leave the tip room */
+.qr-wrapper__code {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 .qr-section--with-lyrics {
@@ -1117,6 +1187,12 @@ watch(
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
+.empty-qr {
+  width: min(70vh, 90%);
+  height: 55vh;
+  margin-top: 1vh;
+}
+
 .empty-message {
   font-size: 1.25rem;
   color: rgba(var(--v-theme-on-surface), 0.7);
@@ -1148,6 +1224,10 @@ watch(
   left: 2vw;
   z-index: 6;
   max-width: 20vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
 }
 
 .karaoke-qr :deep(.qr-display) {

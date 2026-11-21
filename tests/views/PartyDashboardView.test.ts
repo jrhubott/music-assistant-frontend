@@ -1,9 +1,11 @@
+import LyricsViewer from "@/components/LyricsViewer.vue";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import api from "@/plugins/api";
 import {
   EventType,
   ImageType,
   PlaybackState,
+  type PartyConfig,
   type PlayerQueue,
   type QueueItem,
   type Scope,
@@ -83,10 +85,15 @@ vi.mock("@vueuse/core", async (importOriginal) => ({
   useColorMode: () => ({ value: "light" }),
 }));
 
+// The party config a test sets before mounting; null is a party with nothing set.
+const partyConfig = vi.hoisted(() => ({
+  current: null as Partial<PartyConfig> | null,
+}));
+
 vi.mock("@/composables/usePartyConfig", () => ({
   usePartyConfig: () => ({
-    config: { value: null },
-    fetchConfig: vi.fn().mockResolvedValue(null),
+    config: { value: partyConfig.current },
+    fetchConfig: vi.fn(async () => partyConfig.current),
   }),
 }));
 
@@ -576,5 +583,34 @@ describe("PartyDashboardView party settings", () => {
 
     expect(guestAccessDialogOpen(view)).toBe(false);
     expect(view.find(PARTY_SETTINGS).exists()).toBe(false);
+  });
+});
+
+describe("PartyDashboardView karaoke lyrics", () => {
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    partyConfig.current = null;
+  });
+
+  it("holds the lyrics back by the configured delay", async () => {
+    partyConfig.current = {
+      karaoke_mode: true,
+      highlight_ahead: true,
+      lyrics_delay: 350,
+    };
+
+    const view = await mountView();
+
+    // LyricsViewer's offset moves the lyrics forward, so a delay is negative
+    expect(view.getComponent(LyricsViewer).props("offset")).toBe(-0.35);
+  });
+
+  it("leaves the lyrics on time without a delay", async () => {
+    partyConfig.current = { karaoke_mode: true, highlight_ahead: true };
+
+    const view = await mountView();
+
+    expect(view.getComponent(LyricsViewer).props("offset")).toBe(0);
   });
 });
