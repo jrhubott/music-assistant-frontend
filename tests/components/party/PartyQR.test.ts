@@ -185,6 +185,18 @@ describe("PartyQR", () => {
     wrapper.unmount();
   });
 
+  it("removes the copy and share controls when the setting is off", async () => {
+    mocks.partyConfig.value = { show_copy_link: false };
+    const wrapper = mountPartyQr();
+    await flushPromises();
+
+    expect(wrapper.find(".qr-code").exists()).toBe(true);
+    expect(wrapper.find("button").exists()).toBe(false);
+    await wrapper.find(".qr-code").trigger("click");
+    expect(mocks.copyToClipboard).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it("shares the title, description, and link when files are unsupported", async () => {
     mocks.canShare.mockReturnValue(false);
     const wrapper = mountPartyQr();

@@ -10,41 +10,44 @@
     role="status"
     aria-live="polite"
   >
-    <Transition name="tip" mode="out-in">
-      <div
-        :key="tip"
-        :class="
-          cn(
-            'flex w-full items-center gap-[1.2vh] rounded-[1.2vh] bg-black/35 px-[1.6vh] py-[1vh] text-white backdrop-blur-md',
-            !lightText && 'bg-white/55 text-foreground',
-          )
-        "
-      >
-        <component
-          :is="TIP_ICONS[tip]"
-          :class="cn('size-[3.2vh] shrink-0', compact && 'size-[2.6vh]')"
-          aria-hidden="true"
-        />
-        <span
+    <!-- reserves two lines so a shorter tip doesn't resize the QR above it -->
+    <div
+      :class="
+        cn(
+          'flex min-h-[calc(2lh+1.2vh)] w-full items-center justify-center text-[clamp(0.8rem,1.6vh,1.4rem)] leading-snug',
+          compact && 'text-[clamp(0.7rem,1.4vh,1.2rem)]',
+        )
+      "
+    >
+      <Transition name="tip" mode="out-in">
+        <div
+          :key="tip"
           :class="
             cn(
-              'line-clamp-2 min-h-[2lh] content-center text-[clamp(1rem,2.6vh,2.4rem)] leading-snug font-medium',
-              compact && 'text-[clamp(0.9rem,2vh,1.6rem)]',
+              'flex max-w-full items-center gap-[0.8vh] rounded-[1.8vh] border border-white/25 bg-white/10 px-[1.4vh] py-[0.5vh] font-medium text-white/85',
+              !lightText && 'border-black/15 bg-black/5 text-foreground/80',
             )
           "
         >
-          {{ $t(`providers.party.tips.${tip}`) }}
-        </span>
-      </div>
-    </Transition>
-    <div v-if="tips.length > 1" class="flex gap-[0.6vh]" aria-hidden="true">
+          <component
+            :is="TIP_ICONS[tip]"
+            class="size-[clamp(14px,1.8vh,26px)] shrink-0"
+            aria-hidden="true"
+          />
+          <span class="line-clamp-2">
+            {{ $t(`providers.party.tips.${tip}`, partyTipValues(tip, config)) }}
+          </span>
+        </div>
+      </Transition>
+    </div>
+    <div v-if="tips.length > 1" class="flex gap-[0.5vh]" aria-hidden="true">
       <span
         v-for="(dotTip, dot) in tips"
         :key="dotTip"
         :class="
           cn(
-            'size-[0.8vh] rounded-full bg-current opacity-30 transition-opacity duration-500',
-            dot === index && 'opacity-90',
+            'size-[0.6vh] rounded-full bg-current opacity-20 transition-opacity duration-500',
+            dot === index && 'opacity-60',
           )
         "
       ></span>
@@ -54,17 +57,21 @@
 
 <script setup lang="ts">
 import { usePartyConfig } from "@/composables/usePartyConfig";
-import { type PartyTip, partyTips } from "@/helpers/party_tips";
+import { type PartyTip, partyTips, partyTipValues } from "@/helpers/party_tips";
 import { cn } from "@/lib/utils";
 import { $t } from "@/plugins/i18n";
 import {
+  Headphones,
+  Hourglass,
   type LucideIcon,
   Megaphone,
+  MicVocal,
   QrCode,
   Rocket,
   SkipForward,
   SmilePlus,
   UserPen,
+  Vote,
 } from "@lucide/vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
@@ -79,10 +86,14 @@ const props = defineProps<{
 const TIP_MS = 12_000;
 const TIP_ICONS: Record<PartyTip, LucideIcon> = {
   scan: QrCode,
+  karaoke: MicVocal,
+  silent_disco: Headphones,
   nickname: UserPen,
   boost: Rocket,
+  request_refill: Hourglass,
   shout_out: Megaphone,
   skip: SkipForward,
+  skip_votes: Vote,
   react: SmilePlus,
 };
 
