@@ -277,17 +277,6 @@
         </div>
       </template>
     </div>
-    <div
-      class="absolute flex items-center gap-2 opacity-50 font-medium"
-      :style="{
-        color: chromeTextColor,
-        bottom: 'var(--party-player-bottom)',
-        right: 'var(--party-player-right)',
-      }"
-    >
-      <span>{{ $t("providers.party.powered_by") }}</span>
-      <img :src="maLogoSrc" alt="Music Assistant" class="h-5 w-auto" />
-    </div>
 
     <!-- Guest Access Toggle Dialog -->
     <AlertDialog v-model:open="showGuestAccessDialog">
@@ -378,9 +367,6 @@ import { useRouter } from "vue-router";
 
 const router = useRouter();
 const { config: partyConfig, fetchConfig } = usePartyConfig();
-const logoSrc = new URL("@/assets/logo/logo.svg", import.meta.url).href;
-const logoDarkSrc = new URL("@/assets/logo/logo-dark.svg", import.meta.url)
-  .href;
 
 // Set by the unmount hook, so the async work below can tell that the view it
 // belongs to is gone before it acts on a result.
@@ -460,9 +446,6 @@ const useLightChrome = computed(
 );
 const chromeTextColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "rgba(var(--v-theme-on-surface), 0.9)",
-);
-const maLogoSrc = computed(() =>
-  useLightChrome.value ? logoSrc : logoDarkSrc,
 );
 const qrDarkColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "#000000",
@@ -1414,7 +1397,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding-bottom: 0 !important;
-  /* total bottom offset for overlays (here, "Powered by"): the bars pinned to
+  /* total bottom offset for overlays: the bars pinned to
      the bottom of the screen + tailwind spacing-1 gap */
   --party-player-bottom: calc(var(--bottom-bars-height) + 4px);
   /* the player bar runs the full width here, so there is no edge to line up
