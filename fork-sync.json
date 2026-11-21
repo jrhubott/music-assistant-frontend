@@ -5,12 +5,22 @@
     {
       "edge_branch": "edge",
       "base_branch": "main",
+      "features": [
+        "feature/light-followers",
+        "feature/lyrics-word-highlight",
+        "feature/party-kiosk-link",
+        "feature/party-lyrics-delay",
+        "feature/party-screen-extras"
+      ],
       "rebase_features": [],
       "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
     },
     {
       "edge_branch": "stable",
       "base_branch": "stable",
+      "features": [
+        "feature/party-kiosk-link-stable"
+      ],
       "rebase_features": [],
       "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
     }
