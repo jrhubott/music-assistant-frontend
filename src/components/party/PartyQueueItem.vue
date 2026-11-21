@@ -5,7 +5,7 @@
       'queue-item-current': absoluteIndex === currentQueueIndex,
       'queue-item-played': absoluteIndex < currentQueueIndex,
       'queue-item--expanded': isExpanded,
-      'queue-item--clickable': absoluteIndex > currentQueueIndex,
+      'queue-item--clickable': canExpand,
     }"
     @click="onItemClick"
   >
@@ -59,6 +59,41 @@
         </Button>
       </div>
     </template>
+
+    <!-- Host tools, enforced by the server -->
+    <div v-if="isExpanded && isHost" class="queue-item-actions flex-wrap">
+      <p v-if="shoutOut" class="w-full text-sm opacity-80">“{{ shoutOut }}”</p>
+      <Button
+        v-if="shoutOut"
+        size="sm"
+        variant="outline"
+        :disabled="hostBusy"
+        @click.stop="muteShoutOut(item.queue_item_id)"
+      >
+        <MessageSquareOff :size="16" />
+        {{ $t("providers.party.guest_page.host_mute") }}
+      </Button>
+      <Button
+        v-if="isUpcoming"
+        size="sm"
+        variant="outline"
+        :disabled="hostBusy"
+        @click.stop="removeItem(item.queue_item_id)"
+      >
+        <Trash2 :size="16" />
+        {{ $t("providers.party.guest_page.host_remove") }}
+      </Button>
+      <Button
+        v-if="item.extra_attributes?.party_guest_id"
+        size="sm"
+        variant="destructive"
+        :disabled="hostBusy"
+        @click.stop="blockGuest(item.queue_item_id)"
+      >
+        <Ban :size="16" />
+        {{ $t("providers.party.guest_page.host_block") }}
+      </Button>
+    </div>
   </div>
 </template>
 
@@ -68,10 +103,18 @@ import NowPlayingBadge from "@/components/NowPlayingBadge.vue";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import Spinner from "@/components/ui/spinner/Spinner.vue";
+import { usePartyHost } from "@/composables/party/usePartyHost";
 import { getMediaItemImageUrl } from "@/helpers/utils";
 import type { QueueItem } from "@/plugins/api/interfaces";
 import { $t } from "@/plugins/i18n";
-import { Music, Rocket, UserRound } from "@lucide/vue";
+import {
+  Ban,
+  MessageSquareOff,
+  Music,
+  Rocket,
+  Trash2,
+  UserRound,
+} from "@lucide/vue";
 import Color from "color";
 import { computed } from "vue";
 
@@ -103,8 +146,29 @@ const boostDisabled = computed(
   () => props.rateLimitingEnabled && props.boostTokens <= 0,
 );
 
+const {
+  isHost,
+  busy: hostBusy,
+  removeItem,
+  muteShoutOut,
+  blockGuest,
+} = usePartyHost();
+
+const isUpcoming = computed(
+  () => absoluteIndex.value > props.currentQueueIndex,
+);
+const shoutOut = computed(() => props.item.extra_attributes?.party_message);
+// a host can also reach the shout-out of the song that is playing
+const canExpand = computed(
+  () =>
+    isUpcoming.value ||
+    (isHost.value &&
+      absoluteIndex.value === props.currentQueueIndex &&
+      !!shoutOut.value),
+);
+
 const onItemClick = () => {
-  if (absoluteIndex.value > props.currentQueueIndex) {
+  if (canExpand.value) {
     emit("toggleExpand", props.item.queue_item_id);
   }
 };
