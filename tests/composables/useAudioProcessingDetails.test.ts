@@ -198,6 +198,7 @@ describe("buildAudioProcessingDetailsDisplay", () => {
       name: "Patio Music",
       provider: "sendspin--main",
       type: PlayerType.LIGHT,
+      extra_attributes: { follows: "office" },
       active_output_protocol: null,
       output_protocols: [],
     };
@@ -220,6 +221,34 @@ describe("buildAudioProcessingDetailsDisplay", () => {
         ],
       }),
     ]);
+  });
+
+  it("lists no follower for a light that is a protocol member", () => {
+    dependencies.players.office.group_members = ["office", "patio-lights"];
+    dependencies.players["patio-lights"] = {
+      player_id: "patio-lights",
+      name: "Patio Music",
+      provider: "sendspin--main",
+      type: PlayerType.LIGHT,
+      extra_attributes: {},
+      active_output_protocol: null,
+      output_protocols: [],
+    };
+
+    const output = buildDisplay({
+      outputs: [
+        audioOutputDetails({
+          player_ids: ["office"],
+          output_format: makeFormat(),
+        }),
+        audioOutputDetails({
+          player_ids: ["patio-lights"],
+          output_format: makeFormat(),
+        }),
+      ],
+    }).outputPaths[0];
+
+    expect(output.followers).toEqual([]);
   });
 
   it("lists no followers for a speaker without lights", () => {

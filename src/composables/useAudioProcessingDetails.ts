@@ -27,6 +27,7 @@ import {
   dspFilterText,
   type DSPStage,
 } from "@/helpers/audioProcessing";
+import { getFollowedPlayerId } from "@/helpers/player_grouping";
 import { getPlayerDisplayName } from "@/helpers/players";
 import api from "@/plugins/api";
 import { authManager } from "@/plugins/auth";
@@ -120,7 +121,7 @@ export type AudioProcessingDisplayPlayer = Pick<
   | "active_output_protocol"
   | "output_protocols"
 > &
-  Partial<Pick<Player, "group_members" | "type">>;
+  Partial<Pick<Player, "group_members" | "type" | "extra_attributes">>;
 
 export interface AudioProcessingDetailsDependencies {
   translate: Translate;
@@ -504,7 +505,11 @@ function followerStages(
     const leader = dependencies.players[destination.playerId];
     for (const memberId of leader?.group_members ?? []) {
       const member = dependencies.players[memberId];
-      if (member?.type !== PlayerType.LIGHT || seenPlayerIds.has(memberId)) {
+      if (
+        member?.type !== PlayerType.LIGHT ||
+        getFollowedPlayerId(member) !== destination.playerId ||
+        seenPlayerIds.has(memberId)
+      ) {
         continue;
       }
       seenPlayerIds.add(memberId);

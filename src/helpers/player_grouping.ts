@@ -68,7 +68,7 @@ const ATTR_FOLLOWS = "follows";
  * joining a protocol group with it.
  */
 export const getFollowedPlayerId = function (
-  player: Player | undefined,
+  player: Partial<Pick<Player, "extra_attributes">> | undefined,
 ): string | undefined {
   const value = player?.extra_attributes?.[ATTR_FOLLOWS];
   return typeof value === "string" && value ? value : undefined;
