@@ -173,6 +173,8 @@
             :anticipation="10"
             :highlight-ahead="highlightAhead"
             :offset="lyricsOffset"
+            word-highlight
+            break-cue
           />
         </div>
 
@@ -253,6 +255,8 @@
               :highlight-ahead="highlightAhead"
               :offset="lyricsOffset"
               :text-color="lyricsTextColor"
+              word-highlight
+              break-cue
             />
           </div>
         </div>
