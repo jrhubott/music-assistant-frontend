@@ -321,17 +321,6 @@
       :boost-badge-color="boostBadgeColor"
       @leaderboard-space="leaderboardSpace = $event"
     />
-    <div
-      class="absolute flex items-center gap-2 opacity-50 font-medium"
-      :style="{
-        color: chromeTextColor,
-        bottom: 'var(--party-player-bottom)',
-        right: 'var(--party-player-right)',
-      }"
-    >
-      <span>{{ $t("providers.party.powered_by") }}</span>
-      <img :src="maLogoSrc" alt="Music Assistant" class="h-5 w-auto" />
-    </div>
 
     <!-- Guest Access Toggle Dialog -->
     <AlertDialog v-model:open="showGuestAccessDialog">
@@ -424,9 +413,6 @@ import { useRouter } from "vue-router";
 
 const router = useRouter();
 const { config: partyConfig, fetchConfig } = usePartyConfig();
-const logoSrc = new URL("@/assets/logo/logo.svg", import.meta.url).href;
-const logoDarkSrc = new URL("@/assets/logo/logo-dark.svg", import.meta.url)
-  .href;
 
 // Set by the unmount hook, so the async work below can tell that the view it
 // belongs to is gone before it acts on a result.
@@ -459,9 +445,9 @@ const lyricsOffset = computed(() => {
   const delayMs = partyConfig.value?.lyrics_delay ?? 0;
   return delayMs ? -delayMs / MS_PER_SECOND : 0;
 });
-const antiBurnIn = ref(false); // Swap QR/track sides periodically
+const antiBurnIn = ref(false); // Swap QR/track sides between songs
 const swapped = ref(false); // Current swap state for anti burn-in
-let burnInInterval: ReturnType<typeof setInterval> | null = null;
+let lastBurnInSwap = 0;
 const accessError = ref("");
 const showGuestAccessDialog = ref(false);
 const guestAccessSaving = ref(false);
@@ -515,9 +501,6 @@ const useLightChrome = computed(
 );
 const chromeTextColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "rgba(var(--v-theme-on-surface), 0.9)",
-);
-const maLogoSrc = computed(() =>
-  useLightChrome.value ? logoSrc : logoDarkSrc,
 );
 const qrDarkColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "#000000",
@@ -869,27 +852,28 @@ const handleVisibilityChange = () => {
 };
 
 // Lifecycle and event subscriptions
-const BURN_IN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
+const BURN_IN_MIN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
 
 // onMounted subscribes after its awaits, where the component is no longer the
 // active instance and onBeforeUnmount would be a no-op, so the subscriptions
 // are collected here for the unmount hook registered at setup level.
 const unsubscribers: Array<() => void> = [];
 
-watch(antiBurnIn, (enabled) => {
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
-  }
-  if (enabled) {
-    swapped.value = false;
-    burnInInterval = setInterval(() => {
-      swapped.value = !swapped.value;
-    }, BURN_IN_SWAP_MS);
-  } else {
-    swapped.value = false;
-  }
+watch(antiBurnIn, () => {
+  swapped.value = false;
+  lastBurnInSwap = Date.now();
 });
+
+// Moving the layout mid-song would pull the lyrics away from whoever is singing.
+watch(
+  () => store.curQueueItem?.queue_item_id,
+  (queueItemId) => {
+    if (!antiBurnIn.value || !queueItemId) return;
+    if (Date.now() - lastBurnInSwap < BURN_IN_MIN_SWAP_MS) return;
+    swapped.value = !swapped.value;
+    lastBurnInSwap = Date.now();
+  },
+);
 
 onMounted(async () => {
   // Registered before the first await, so that leaving the view while one is
@@ -979,10 +963,6 @@ onBeforeUnmount(() => {
   if (wakeLock) {
     wakeLock.release();
     wakeLock = null;
-  }
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
   }
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
@@ -1495,7 +1475,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding-bottom: 0 !important;
-  /* total bottom offset for overlays (here, "Powered by"): the bars pinned to
+  /* total bottom offset for overlays (here, the leaderboard): the bars pinned to
      the bottom of the screen + tailwind spacing-1 gap */
   --party-player-bottom: calc(var(--bottom-bars-height) + 4px);
   /* the player bar runs the full width here, so there is no edge to line up
