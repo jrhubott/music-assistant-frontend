@@ -2367,6 +2367,7 @@ export interface PartyConfig {
   skip_votes_required: number;
   karaoke_mode: boolean;
   highlight_ahead: boolean;
+  word_highlight: boolean;
   request_badge_color?: string;
   boost_badge_color?: string;
   anti_burn_in: boolean;

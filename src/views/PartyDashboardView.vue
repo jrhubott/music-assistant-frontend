@@ -165,7 +165,7 @@
             :lrc-lyrics="currentLyrics.synced"
             :anticipation="10"
             :highlight-ahead="highlightAhead"
-            word-highlight
+            :word-highlight="wordHighlight"
             break-cue
           />
         </div>
@@ -235,7 +235,7 @@
               :lrc-lyrics="currentLyrics.synced"
               :highlight-ahead="highlightAhead"
               :text-color="lyricsTextColor"
-              word-highlight
+              :word-highlight="wordHighlight"
               break-cue
             />
           </div>
@@ -408,6 +408,7 @@ const qrAvailable = ref(true); // Optimistic default; PartyQR emits false if gue
 const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown whenever karaoke mode is on
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
+const wordHighlight = computed(() => partyConfig.value?.word_highlight ?? true);
 const antiBurnIn = ref(false); // Swap QR/track sides periodically
 const swapped = ref(false); // Current swap state for anti burn-in
 let burnInInterval: ReturnType<typeof setInterval> | null = null;

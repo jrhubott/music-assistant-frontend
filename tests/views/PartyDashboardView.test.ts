@@ -1,3 +1,4 @@
+import LyricsViewer from "@/components/LyricsViewer.vue";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import api from "@/plugins/api";
 import {
@@ -577,4 +578,33 @@ describe("PartyDashboardView party settings", () => {
     expect(guestAccessDialogOpen(view)).toBe(false);
     expect(view.find(PARTY_SETTINGS).exists()).toBe(false);
   });
+});
+
+describe("PartyDashboardView word highlighting", () => {
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    partyConfig.current = null;
+  });
+
+  it.each([
+    [true, true],
+    [false, false],
+    [undefined, true],
+  ])(
+    "with word_highlight %s sets word highlighting to %s",
+    async (setting, expected) => {
+      partyConfig.current = {
+        karaoke_mode: true,
+        highlight_ahead: true,
+        word_highlight: setting,
+      };
+
+      const view = await mountView();
+
+      expect(view.getComponent(LyricsViewer).props("wordHighlight")).toBe(
+        expected,
+      );
+    },
+  );
 });
