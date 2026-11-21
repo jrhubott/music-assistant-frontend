@@ -6,11 +6,8 @@
       "edge_branch": "edge",
       "base_branch": "main",
       "features": [
-        "feature/light-followers",
-        "feature/lyrics-word-highlight",
         "feature/party-kiosk-link",
-        "feature/party-lyrics-delay",
-        "feature/party-screen-extras"
+        "feature/party-enhancements"
       ],
       "rebase_features": [],
       "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
