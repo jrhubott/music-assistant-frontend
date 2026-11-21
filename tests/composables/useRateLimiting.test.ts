@@ -126,6 +126,7 @@ describe("useRateLimiting", () => {
       karaoke_mode: false,
       highlight_ahead: true,
       lyrics_delay: 0,
+      word_highlight: true,
       request_badge_color: "#000000",
       boost_badge_color: "#ffffff",
       anti_burn_in: false,
@@ -142,6 +143,7 @@ describe("useRateLimiting", () => {
       show_skip_meter: false,
       show_request_animations: false,
       show_tips: false,
+      show_copy_link: true,
     };
 
     rateLimiting.configure(config);

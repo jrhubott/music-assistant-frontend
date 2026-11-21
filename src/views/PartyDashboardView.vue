@@ -173,7 +173,7 @@
             :anticipation="10"
             :highlight-ahead="highlightAhead"
             :offset="lyricsOffset"
-            word-highlight
+            :word-highlight="wordHighlight"
             break-cue
           />
         </div>
@@ -255,7 +255,7 @@
               :highlight-ahead="highlightAhead"
               :offset="lyricsOffset"
               :text-color="lyricsTextColor"
-              word-highlight
+              :word-highlight="wordHighlight"
               break-cue
             />
           </div>
@@ -451,6 +451,7 @@ const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown wheneve
 const leaderboardSpace = ref(0); // px the corner leaderboard takes from the bottom
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
+const wordHighlight = computed(() => partyConfig.value?.word_highlight ?? true);
 // The configured lyrics delay, in milliseconds, holds the lyrics back to match
 // speakers that play late; LyricsViewer takes it as a seconds offset forward.
 const MS_PER_SECOND = 1000;

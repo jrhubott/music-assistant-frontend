@@ -613,4 +613,25 @@ describe("PartyDashboardView karaoke lyrics", () => {
 
     expect(view.getComponent(LyricsViewer).props("offset")).toBe(0);
   });
+
+  it.each([
+    [true, true],
+    [false, false],
+    [undefined, true],
+  ])(
+    "with word_highlight %s sets word highlighting to %s",
+    async (setting, expected) => {
+      partyConfig.current = {
+        karaoke_mode: true,
+        highlight_ahead: true,
+        word_highlight: setting,
+      };
+
+      const view = await mountView();
+
+      expect(view.getComponent(LyricsViewer).props("wordHighlight")).toBe(
+        expected,
+      );
+    },
+  );
 });
