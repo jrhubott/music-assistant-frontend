@@ -2389,6 +2389,7 @@ export interface PartyConfig {
   show_skip_meter: boolean;
   show_request_animations: boolean;
   show_tips: boolean;
+  show_copy_link: boolean;
 }
 
 export interface PartyLeaderboardEntry {

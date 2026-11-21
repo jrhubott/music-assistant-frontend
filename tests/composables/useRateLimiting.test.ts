@@ -141,6 +141,7 @@ describe("useRateLimiting", () => {
       show_skip_meter: false,
       show_request_animations: false,
       show_tips: false,
+      show_copy_link: true,
     };
 
     rateLimiting.configure(config);
