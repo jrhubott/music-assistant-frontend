@@ -2080,7 +2080,6 @@
             "enable_guest_access": "Enable Guest Access",
             "guest_access_enabled": "Guest Access Enabled",
             "guest_access_toggle_failed": "Failed to toggle guest access",
-            "powered_by": "Powered by",
             "copy_link": "Copy link",
             "more_share_options": "More sharing options",
             "qr_default_text": "Scan the QR code to join the party!",
