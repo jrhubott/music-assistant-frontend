@@ -3,6 +3,8 @@
     <!-- Listen in (shared audio) -->
     <PartyListenIn />
 
+    <PartyHostMode />
+
     <!-- Nickname shown on the party screen with the guest's requests -->
     <PartyNickname />
 
@@ -176,6 +178,7 @@
 
 <script setup lang="ts">
 import MediaSearch from "@/components/MediaSearch.vue";
+import PartyHostMode from "@/components/party/PartyHostMode.vue";
 import PartyListenIn from "@/components/party/PartyListenIn.vue";
 import PartyNickname from "@/components/party/PartyNickname.vue";
 import PartyReactionBar from "@/components/party/PartyReactionBar.vue";
@@ -213,6 +216,9 @@ import {
   watch,
 } from "vue";
 import { toast } from "vue-sonner";
+
+// Sent by the server when the party only plays songs with lyrics
+const REASON_NO_LYRICS = "no_lyrics";
 
 // --- Composables ---
 const { config: partyConfig, fetchConfig } = usePartyConfig();
@@ -381,8 +387,17 @@ const addToQueue = async (item: Track | Artist, position: "next" | "end") => {
       boost: position === "next",
       guest_name: nickname.value || undefined,
       message: shoutOut.value || undefined,
-    })) as { success: boolean; boosted: boolean; started_playback: boolean };
+    })) as {
+      success: boolean;
+      reason?: string;
+      boosted: boolean;
+      started_playback: boolean;
+    };
 
+    if (result.reason === REASON_NO_LYRICS) {
+      toast.warning($t("providers.party.guest_page.no_lyrics", [item.name]));
+      return;
+    }
     if (!result.success) {
       throw new Error("Server rejected the request");
     }
@@ -431,8 +446,16 @@ const boostQueueItem = async (item: QueueItem) => {
     const result = (await api.sendCommand("party/boost_queue_item", {
       queue_item_id: item.queue_item_id,
       guest_name: nickname.value || undefined,
-    })) as { success: boolean };
+    })) as { success: boolean; reason?: string };
 
+    if (result.reason === REASON_NO_LYRICS) {
+      toast.warning(
+        $t("providers.party.guest_page.no_lyrics", [
+          item.media_item?.name || item.name,
+        ]),
+      );
+      return;
+    }
     if (!result.success) {
       throw new Error("Server rejected the request");
     }

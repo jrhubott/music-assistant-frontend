@@ -1559,6 +1559,7 @@ export interface QueueItem {
     party_skip_votes?: number; // guests that voted to skip this (currently playing) item
     party_guest_name?: string; // nickname of the guest that requested this item
     party_message?: string; // shout-out the guest attached to the request
+    party_guest_id?: string; // opaque key of the requesting guest device
     playback_speed?: number; // current playback speed multiplier (audiobook/podcast)
   };
 }
@@ -2481,6 +2482,7 @@ export interface PartyConfig {
   show_request_animations: boolean;
   show_tips: boolean;
   show_copy_link: boolean;
+  host_controls_enabled?: boolean;
 }
 
 export interface PartyLeaderboardEntry {
