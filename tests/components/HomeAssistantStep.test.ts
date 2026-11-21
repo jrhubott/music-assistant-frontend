@@ -2,6 +2,7 @@ import HomeAssistantStep from "@/components/onboarding/steps/HomeAssistantStep.v
 import type { ConfiguredProvider } from "@/composables/useOnboarding";
 import { ProviderStatus, ProviderType } from "@/plugins/api/interfaces";
 import { eventbus } from "@/plugins/eventbus";
+import type { StepPrimaryAction } from "@/helpers/onboarding";
 import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,6 +59,17 @@ function mountStep() {
   });
 }
 
+type Wrapper = ReturnType<typeof mountStep>;
+
+function testId(wrapper: Wrapper, id: string) {
+  return wrapper.find(`[data-testid=${id}]`);
+}
+
+// the step's own way forward, which the wizard shows as its main button
+const primaryAction = (wrapper: Wrapper) =>
+  (wrapper.vm as unknown as { primaryAction?: StepPrimaryAction })
+    .primaryAction;
+
 describe("HomeAssistantStep", () => {
   beforeEach(() => {
     onboardingState.plugins.value = [];
@@ -66,6 +78,36 @@ describe("HomeAssistantStep", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("lists what connecting brings", () => {
+    const wrapper = mountStep();
+
+    expect(
+      testId(wrapper, "onboarding-invitation-features")
+        .findAll("[data-slot=item]")
+        .map((item) => item.text()),
+    ).toEqual([
+      "onboarding.steps.home_assistant.features.players",
+      "onboarding.steps.home_assistant.features.controls",
+      "onboarding.steps.home_assistant.features.sign_in",
+      "onboarding.steps.home_assistant.features.remote_access",
+    ]);
+    wrapper.unmount();
+  });
+
+  it("offers Connect as the step's main action, and says it is optional", () => {
+    const wrapper = mountStep();
+
+    expect(primaryAction(wrapper)?.labelKey).toBe(
+      "onboarding.steps.home_assistant.connect",
+    );
+    // the wizard's footer holds it, so the step has no button of its own
+    expect(wrapper.find("button").exists()).toBe(false);
+    expect(testId(wrapper, "onboarding-invitation-note").text()).toBe(
+      "onboarding.steps.home_assistant.optional",
+    );
+    wrapper.unmount();
   });
 
   it("starts the Home Assistant setup flow from Connect", async () => {
@@ -79,9 +121,7 @@ describe("HomeAssistantStep", () => {
         .find("[data-testid=onboarding-home-assistant-connection]")
         .exists(),
     ).toBe(false);
-    await wrapper
-      .find("[data-testid=onboarding-home-assistant-connect]")
-      .trigger("click");
+    primaryAction(wrapper)?.run();
 
     expect(emit).toHaveBeenCalledWith("setupFlowDialog", {
       kind: "provider",
@@ -101,9 +141,12 @@ describe("HomeAssistantStep", () => {
     );
     expect(connection.text()).toBe("Home Assistant");
     expect(connection.find("[aria-label]").exists()).toBe(false);
-    expect(
-      wrapper.find("[data-testid=onboarding-home-assistant-connect]").exists(),
-    ).toBe(false);
+    expect(primaryAction(wrapper)).toBeUndefined();
+    // set up, so there is nothing left to invite to or leave for later
+    expect(testId(wrapper, "onboarding-invitation-features").exists()).toBe(
+      false,
+    );
+    expect(testId(wrapper, "onboarding-invitation-note").exists()).toBe(false);
     wrapper.unmount();
   });
 

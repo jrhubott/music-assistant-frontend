@@ -2,9 +2,11 @@ import DiscoveredPlayerItem from "@/components/onboarding/DiscoveredPlayerItem.v
 import { HOMEASSISTANT_SYSTEM_USER } from "@/helpers/users";
 import {
   EventType,
-  MediaType,
+  ProviderFeature,
+  ProviderOffering,
   PlayerType,
   ProviderSharing,
+  ProviderStatus,
   ProviderType,
   Scope,
   UserRole,
@@ -44,14 +46,23 @@ const {
     // the players that registered, which is where a player's live state is
     players: {} as Record<string, Partial<Player>>,
     // the instances that loaded, which name a provider that has no custom name
-    providers: {} as Record<string, { name: string; domain?: string }>,
+    providers: {} as Record<
+      string,
+      {
+        name: string;
+        domain?: string;
+        type?: ProviderType;
+        available?: boolean;
+        supported_features?: ProviderFeature[];
+      }
+    >,
     providerManifests: {} as Record<
       string,
       {
         builtin: boolean;
         name: string;
         type?: ProviderType;
-        media_types?: MediaType[];
+        provides?: ProviderOffering[];
       }
     >,
     getAllUsers: vi.fn(),
@@ -222,8 +233,9 @@ function addProvider(
     builtin?: boolean;
     enabled?: boolean;
     lastError?: unknown;
+    status?: ProviderStatus;
     name?: string;
-    mediaTypes?: MediaType[];
+    provides?: ProviderOffering[];
   } = {},
 ) {
   providerConfigs.list.push({
@@ -233,12 +245,13 @@ function addProvider(
     name: options.name ?? null,
     enabled: options.enabled ?? true,
     last_error: options.lastError ?? null,
+    status: options.status,
   });
   apiMock.providerManifests[domain] = {
     builtin: options.builtin ?? false,
     name: `${domain} manifest`,
     type,
-    media_types: options.mediaTypes,
+    provides: options.provides,
   };
 }
 
@@ -392,6 +405,7 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
         builtin: false,
         enabled: true,
         audioSource: false,
+        aiService: false,
       },
       {
         type: ProviderType.PLAYER,
@@ -399,21 +413,23 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
         builtin: true,
         enabled: true,
         audioSource: false,
+        aiService: false,
       },
     ]);
     // the builtin player provider does not tick the players step off
     expect(pending.value.map((step) => step.id)).toEqual([
       "intent",
       "players",
+      "ai",
       "invite_members",
     ]);
   });
 
   it("only takes a plugin whose manifest declares an audio source for an app connection", async () => {
-    const audioSource = [MediaType.AUDIO_SOURCE];
+    const audioSource = [ProviderOffering.AUDIO_SOURCE];
     // a player provider declares it for the line-ins of its devices
     addProvider("sendspin--1", "sendspin", ProviderType.PLAYER, {
-      mediaTypes: audioSource,
+      provides: audioSource,
     });
     addProvider("party--1", "party", ProviderType.PLUGIN);
     preferenceState.intent.value = "phone_apps";
@@ -428,7 +444,7 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
     );
 
     addProvider("connect--1", "spotify_connect", ProviderType.PLUGIN, {
-      mediaTypes: audioSource,
+      provides: audioSource,
     });
     module = await loadOnboardingModule();
     expect(
@@ -438,6 +454,59 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
       "spotify_connect",
     ]);
     expect(module.useOnboarding().pending.value).toEqual([]);
+  });
+
+  it("takes a plugin that brings AI or speech for an AI service, and Home Assistant while it provides engines", async () => {
+    addProvider("openai--1", "openai_compatible", ProviderType.PLUGIN, {
+      provides: [ProviderOffering.AI],
+      // set up but switched off, which still counts
+      enabled: false,
+    });
+    addProvider("tts--1", "openai_tts", ProviderType.PLUGIN, {
+      provides: [ProviderOffering.TTS],
+    });
+    addProvider("hass--1", "hass", ProviderType.PLUGIN);
+    addProvider("lastfm--1", "lastfm_scrobble", ProviderType.PLUGIN, {
+      provides: [ProviderOffering.SCROBBLE],
+    });
+    apiMock.providers["hass--1"] = {
+      name: "Home Assistant",
+      type: ProviderType.PLUGIN,
+      available: true,
+      supported_features: [],
+    };
+
+    let module = await loadOnboardingModule();
+    expect(
+      module.useOnboarding().ctx.value.providers.map((p) => p.aiService),
+    ).toEqual([true, true, false, false]);
+    expect(module.configuredAIServices().map((p) => p.domain)).toEqual([
+      "openai_compatible",
+      "openai_tts",
+    ]);
+
+    apiMock.providers["hass--1"].supported_features = [
+      ProviderFeature.AI_QUERY,
+    ];
+    module = await loadOnboardingModule();
+    expect(module.configuredAIServices().map((p) => p.domain)).toEqual([
+      "openai_compatible",
+      "openai_tts",
+      "hass",
+    ]);
+  });
+
+  it("ticks the AI step off once an AI service is set up", async () => {
+    addProvider("spotify--1", "spotify", ProviderType.MUSIC);
+    addProvider("sonos--1", "sonos", ProviderType.PLAYER);
+    addProvider("openai--1", "openai_compatible", ProviderType.PLUGIN, {
+      provides: [ProviderOffering.AI],
+    });
+
+    const { pending } = await loadOnboarding();
+    preferenceState.intent.value = "music_hub";
+
+    expect(pending.value.map((step) => step.id)).toEqual(["invite_members"]);
   });
 
   it("offers to connect Home Assistant only on a server that is not the add-on", async () => {
@@ -468,6 +537,23 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
       "home_assistant",
     );
   });
+
+  it.each([
+    [ProviderStatus.LOADED, true],
+    [ProviderStatus.LOADING, false],
+    [ProviderStatus.DISABLED, false],
+    [ProviderStatus.ERROR, false],
+  ])(
+    "sees a Home Assistant connection that is %s as connected: %s",
+    async (status, connected) => {
+      addProvider("hass--1", "hass", ProviderType.PLUGIN, { status });
+
+      const { ctx } = await loadOnboarding();
+
+      expect(ctx.value.homeAssistantConfigured).toBe(true);
+      expect(ctx.value.homeAssistantConnected).toBe(connected);
+    },
+  );
 
   it("asks nothing of a guest, who is only passing through", async () => {
     signInAs(
@@ -809,8 +895,11 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
     const { pending } = await loadOnboarding();
     preferenceState.intent.value = "music_hub";
 
-    // the household is optional, but still pending until done
-    expect(pending.value.map((step) => step.id)).toEqual(["invite_members"]);
+    // the AI and the household are optional, but still pending until done
+    expect(pending.value.map((step) => step.id)).toEqual([
+      "ai",
+      "invite_members",
+    ]);
   });
 
   it("asks the server to complete onboarding without a global error toast", async () => {
@@ -1018,8 +1107,12 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
       // no account, so no permissions and no member either
       expect(ctx.value.isAdmin).toBe(false);
       expect(ctx.value.isMember).toBe(false);
-      expect(steps.value[0]?.id).toBe("account");
-      expect(pending.value[0]?.id).toBe("account");
+      // the welcome comes first, and the account straight after it
+      expect(steps.value.slice(0, 2).map((step) => step.id)).toEqual([
+        "get_started",
+        "account",
+      ]);
+      expect(pending.value[0]?.id).toBe("get_started");
       // nothing was asked of a server nobody is signed in to
       expect(apiMock.getProviderConfigs).not.toHaveBeenCalled();
       expect(apiMock.getAllUsers).not.toHaveBeenCalled();
@@ -1036,6 +1129,7 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
       expect(ctx.value.signedIn).toBe(true);
       expect(ctx.value.isAdmin).toBe(true);
       expect(pending.value.map((step) => step.id)).not.toContain("account");
+      expect(pending.value.map((step) => step.id)).not.toContain("get_started");
     });
 
     it("stays the admin's while their permissions are still on their way", async () => {
@@ -1073,6 +1167,7 @@ describe("useOnboarding", { timeout: 20_000 }, () => {
       "music_sources",
       "players",
       "core_settings",
+      "ai",
       "invite_members",
       "finish",
     ];

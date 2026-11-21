@@ -1,20 +1,29 @@
 import {
   ConfigEntryType,
+  ProviderOffering,
+  ProviderType,
   Scope,
   type ConfigEntry,
 } from "@/plugins/api/interfaces";
 import { describe, expect, it } from "vitest";
 import { BUILTIN_ROLE_SCOPES, scopeChecker } from "../../tests/fixtures/scopes";
+import { MCP_SERVER_DOMAIN } from "./ai_engines";
+import { HASS_DOMAIN } from "./home_assistant";
 import {
   ACCOUNT_ACCESS_CATEGORY,
   AUDIO_ANALYSIS_CATEGORY,
   CACHE_DOMAIN,
   canEditSettingsPage,
   coreOwner,
+  coreSettingsPageId,
   isKnownOwner,
   LOG_LEVEL_KEY,
+  providerOwner,
+  providerListType,
+  providerPageEntries,
+  providerSettingsPageId,
   SETTINGS_PAGES,
-  settingsSectionLinks,
+  settingsPageProviderDomain,
   sourceIncludesEntry,
   STREAMS_DOMAIN,
   TASKS_DOMAIN,
@@ -22,13 +31,13 @@ import {
   type SettingsOwner,
   type SettingsPageId,
 } from "./settings_pages";
-import { SETTINGS_SECTIONS } from "./settings_sections";
 
 const STREAMS = coreOwner(STREAMS_DOMAIN);
 const TASKS = coreOwner(TASKS_DOMAIN);
 const WEBSERVER = coreOwner(WEBSERVER_DOMAIN);
 // the core modules the server offers settings of
 const CONFIGURABLE_CORE_MODULES = [
+  "ai",
   "cache",
   "discovery",
   "metadata",
@@ -112,13 +121,6 @@ describe("SETTINGS_PAGES", () => {
       if (page.sources.length === 1) expect(page.sources[0].title).toBeFalsy();
     }
   });
-
-  it("links each page from an existing settings section", () => {
-    const sectionNames = SETTINGS_SECTIONS.map((section) => section.name);
-    for (const page of Object.values(SETTINGS_PAGES)) {
-      if (page.link) expect(sectionNames).toContain(page.link.section);
-    }
-  });
 });
 
 describe("sourceIncludesEntry", () => {
@@ -188,22 +190,31 @@ describe("the page of each setting", () => {
         WEBSERVER,
         entry("auth_allow_self_registration", ACCOUNT_ACCESS_CATEGORY),
       ),
-    ).toEqual(["user_management"]);
+    ).toEqual(["users"]);
     expect(
       pagesShowing(WEBSERVER, entry("auth_allow_self_registration", "generic")),
     ).toEqual(["network"]);
   });
 
-  it("shows the task settings on a page of their own", () => {
+  it("shows the task settings with the background tasks", () => {
     expect(
       pagesShowing(TASKS, entry("max_concurrent_tasks", "generic")),
-    ).toEqual(["task_settings"]);
+    ).toEqual(["background_tasks"]);
   });
 
   it("shows the cache actions with the diagnostics", () => {
     expect(
       pagesShowing(coreOwner(CACHE_DOMAIN), entry("clear_cache", "generic")),
     ).toEqual(["diagnostics"]);
+  });
+
+  it("shows the player controls of Home Assistant on its page", () => {
+    expect(
+      pagesShowing(
+        providerOwner(HASS_DOMAIN),
+        entry("power_controls", "player_controls"),
+      ),
+    ).toEqual(["home_assistant"]);
   });
 
   it("shows no log level on any page", () => {
@@ -236,75 +247,86 @@ describe("isKnownOwner", () => {
   });
 });
 
-describe("settingsSectionLinks", () => {
-  it("links the audio analysis section to the analysis status for an admin", () => {
-    expect(
-      settingsSectionLinks(
-        "audio_analysis_providers",
-        scopeChecker(BUILTIN_ROLE_SCOPES.admin),
-      ).map((link) => link.id),
-    ).toEqual(["audio_analysis"]);
+describe("providerSettingsPageId", () => {
+  it("gives Home Assistant a page of its own", () => {
+    expect(providerSettingsPageId(HASS_DOMAIN)).toBe("home_assistant");
   });
 
-  it("links the players section to the playback defaults for an admin", () => {
-    expect(
-      settingsSectionLinks(
-        "players",
-        scopeChecker(BUILTIN_ROLE_SCOPES.admin),
-      ).map((link) => link.id),
-    ).toEqual(["playback"]);
+  it("manages the built-in MCP server from the AI page", () => {
+    expect(providerSettingsPageId(MCP_SERVER_DOMAIN)).toBe("ai");
   });
 
-  it("leaves the playback defaults out for a role that may not change server settings", () => {
-    expect(
-      settingsSectionLinks(
-        "players",
-        scopeChecker([Scope.CONFIG_PLAYERS_WRITE]),
-      ),
-    ).toEqual([]);
+  it("gives any other provider none", () => {
+    expect(providerSettingsPageId("hass_players")).toBeUndefined();
   });
+});
 
-  it("leaves a link out for a role without its scope", () => {
-    expect(
-      settingsSectionLinks(
-        "audio_analysis_providers",
-        scopeChecker([Scope.CONFIG_PROVIDERS_WRITE]),
-      ),
-    ).toEqual([]);
-  });
-
+describe("coreSettingsPageId", () => {
   it.each([
-    ["music_providers", "library"],
-    ["metadata_providers", "metadata"],
-  ])(
-    "links the %s section to the %s settings for an admin",
-    (section, pageId) => {
-      expect(
-        settingsSectionLinks(
-          section,
-          scopeChecker(BUILTIN_ROLE_SCOPES.admin),
-        ).map((link) => link.id),
-      ).toEqual([pageId]);
+    ["players", "playback"],
+    ["ai", "ai"],
+    ["tasks", "background_tasks"],
+  ])("finds the page showing the settings of the %s module", (domain, id) => {
+    expect(coreSettingsPageId(domain)).toBe(id);
+  });
+
+  it("finds none for a module no page shows", () => {
+    expect(coreSettingsPageId("radio_tuner")).toBeUndefined();
+  });
+});
+
+describe("providerListType", () => {
+  it("lists a plugin offering audio sources with the music sources", () => {
+    expect(
+      providerListType(ProviderType.PLUGIN, [ProviderOffering.AUDIO_SOURCE]),
+    ).toBe(ProviderType.MUSIC);
+  });
+
+  it("lists a plugin with the plugins when its manifest provides no audio sources", () => {
+    expect(providerListType(ProviderType.PLUGIN)).toBe(ProviderType.PLUGIN);
+    expect(providerListType(ProviderType.PLUGIN, [])).toBe(ProviderType.PLUGIN);
+  });
+
+  it("lists any other type with its type, whatever it offers", () => {
+    // the Sendspin player provider declares audio sources for its line-ins
+    expect(
+      providerListType(ProviderType.PLAYER, [ProviderOffering.AUDIO_SOURCE]),
+    ).toBe(ProviderType.PLAYER);
+    expect(
+      providerListType(ProviderType.METADATA, [ProviderOffering.AUDIO_SOURCE]),
+    ).toBe(ProviderType.METADATA);
+  });
+});
+
+describe("providerPageEntries", () => {
+  const entries = [
+    entry("power_controls", "player_controls"),
+    entry("some_option", "generic"),
+    entry(LOG_LEVEL_KEY, "generic"),
+  ];
+
+  it("gives the settings the page of the provider shows", () => {
+    expect(
+      providerPageEntries(HASS_DOMAIN, entries).map(({ key }) => key),
+    ).toEqual(["power_controls"]);
+  });
+
+  it("gives none for a provider without a page of its own", () => {
+    expect(providerPageEntries("spotify", entries)).toEqual([]);
+  });
+});
+
+describe("settingsPageProviderDomain", () => {
+  it("names the provider of a page showing only its settings", () => {
+    expect(settingsPageProviderDomain("home_assistant")).toBe(HASS_DOMAIN);
+  });
+
+  it.each<SettingsPageId>(["metadata", "network"])(
+    "names none for the %s page of core settings",
+    (pageId) => {
+      expect(settingsPageProviderDomain(pageId)).toBeUndefined();
     },
   );
-
-  it("leaves the library options out for a member", () => {
-    expect(
-      settingsSectionLinks(
-        "music_providers",
-        scopeChecker(BUILTIN_ROLE_SCOPES.user),
-      ),
-    ).toEqual([]);
-  });
-
-  it("links nothing from a section without pages", () => {
-    expect(
-      settingsSectionLinks(
-        "plugin_providers",
-        scopeChecker(BUILTIN_ROLE_SCOPES.admin),
-      ),
-    ).toEqual([]);
-  });
 });
 
 describe("canEditSettingsPage", () => {
@@ -319,6 +341,21 @@ describe("canEditSettingsPage", () => {
       canEditSettingsPage(
         "audio_analysis",
         scopeChecker(BUILTIN_ROLE_SCOPES.user),
+      ),
+    ).toBe(false);
+  });
+
+  it("needs the provider write scope for provider settings", () => {
+    expect(
+      canEditSettingsPage(
+        "home_assistant",
+        scopeChecker([Scope.CONFIG_PROVIDERS_WRITE]),
+      ),
+    ).toBe(true);
+    expect(
+      canEditSettingsPage(
+        "home_assistant",
+        scopeChecker([Scope.CONFIG_CORE_WRITE]),
       ),
     ).toBe(false);
   });

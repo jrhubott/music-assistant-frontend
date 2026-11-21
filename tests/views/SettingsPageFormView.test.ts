@@ -1,3 +1,4 @@
+import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
 import type { SettingsPageId } from "@/helpers/settings_pages";
 import type { MusicAssistantApi } from "@/plugins/api";
 import {
@@ -10,7 +11,7 @@ import SettingsPageFormView from "@/views/settings/SettingsPageFormView.vue";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { apiMock, hasScope } = vi.hoisted(() => ({
+const { apiMock, hasScope, toastSuccess } = vi.hoisted(() => ({
   apiMock: {
     getCoreConfig: vi.fn<MusicAssistantApi["getCoreConfig"]>(),
     invokeCoreConfigAction:
@@ -18,12 +19,15 @@ const { apiMock, hasScope } = vi.hoisted(() => ({
     saveCoreConfig: vi.fn<MusicAssistantApi["saveCoreConfig"]>(),
   },
   hasScope: vi.fn<(scope: Scope) => boolean>(),
+  toastSuccess: vi.fn(),
 }));
 
 vi.mock("@/plugins/api", () => ({ api: apiMock, default: apiMock }));
 vi.mock("@/plugins/auth", () => ({ authManager: { hasScope } }));
 vi.mock("@/plugins/i18n", () => ({ $t: (key: string) => key }));
-vi.mock("vue-sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("vue-sonner", () => ({
+  toast: { error: vi.fn(), success: toastSuccess },
+}));
 
 enableAutoUnmount(afterEach);
 
@@ -31,6 +35,7 @@ enableAutoUnmount(afterEach);
 const editConfigStub = {
   name: "EditConfig",
   props: { configEntries: Array, disabled: Boolean, inlineSave: Boolean },
+  emits: ["submit", "action", "immediateApply"],
   template: "<div />",
 };
 
@@ -40,6 +45,19 @@ beforeEach(() => {
 });
 
 describe("SettingsPageFormView on the playback defaults", () => {
+  it.each(["library", "metadata", "playback"] as const)(
+    "heads the %s settings with the header of their page",
+    async (page) => {
+      apiMock.getCoreConfig.mockImplementation(async (domain) =>
+        playbackConfig(domain, STREAMS_ENTRIES),
+      );
+
+      const wrapper = await mountPage(page);
+
+      expect(wrapper.getComponent(SettingsPageHeader).props("page")).toBe(page);
+    },
+  );
+
   it("shows the playback defaults of each module in one form, by category, without their log levels", async () => {
     apiMock.getCoreConfig.mockImplementation(async (domain) =>
       playbackConfig(domain, STREAMS_ENTRIES),
@@ -114,6 +132,66 @@ describe("SettingsPageFormView on the metadata settings", () => {
   });
 });
 
+describe("SettingsPageFormView on the library settings", () => {
+  beforeEach(() => {
+    apiMock.getCoreConfig.mockImplementation(async (domain) =>
+      libraryConfig(domain),
+    );
+  });
+
+  it("shows which source plays first and the library maintenance after it, each under a heading of its own", async () => {
+    const wrapper = await mountPage("library");
+
+    expect(
+      formConfigEntries(wrapper).map(({ key, category, category_label }) => ({
+        key,
+        category,
+        category_label,
+      })),
+    ).toEqual([
+      {
+        key: "core/streams/stream_source_mode",
+        category: "core/streams",
+        category_label: "settings.library.source_selection",
+      },
+      {
+        key: "core/streams/upgrade_below_quality",
+        category: "core/streams",
+        category_label: "settings.library.source_selection",
+      },
+      {
+        key: "core/music/keep_remasters_apart",
+        category: "core/music",
+        category_label: "settings.library.maintenance",
+      },
+      {
+        key: "core/music/reset_db",
+        category: "core/music",
+        category_label: "settings.library.maintenance",
+      },
+    ]);
+  });
+
+  it("resets the library on the music module", async () => {
+    apiMock.invokeCoreConfigAction.mockResolvedValueOnce({
+      message: "The database has been reset.",
+      open_url: null,
+    });
+    const wrapper = await mountPage("library");
+
+    wrapper
+      .getComponent(editConfigStub)
+      .vm.$emit("action", "core/music/reset_db", {}, false);
+    await flushPromises();
+
+    expect(apiMock.invokeCoreConfigAction).toHaveBeenCalledExactlyOnceWith(
+      "music",
+      "reset_db",
+    );
+    expect(toastSuccess).toHaveBeenCalledWith("The database has been reset.");
+  });
+});
+
 describe("SettingsPageFormView on the task settings", () => {
   it("shows every setting of the tasks module but its log level", async () => {
     apiMock.getCoreConfig.mockResolvedValue(
@@ -123,7 +201,7 @@ describe("SettingsPageFormView on the task settings", () => {
       ]),
     );
 
-    expect(await formEntries("task_settings")).toEqual([
+    expect(await formEntries("background_tasks")).toEqual([
       { key: "max_concurrent_tasks", category: "generic" },
     ]);
     expect(apiMock.getCoreConfig).toHaveBeenCalledExactlyOnceWith("tasks");
@@ -158,21 +236,37 @@ describe("SettingsPageFormView", () => {
 
 /** The key and category of each entry the form of a page gets. */
 async function formEntries(page: SettingsPageId) {
+  const wrapper = await mountPage(page);
+  return formConfigEntries(wrapper).map(({ key, category }) => ({
+    key,
+    category,
+  }));
+}
+
+async function mountPage(page: SettingsPageId) {
   const wrapper = mount(SettingsPageFormView, {
     props: { page },
     global: { stubs: { EditConfig: editConfigStub } },
   });
   await flushPromises();
-  return (
-    wrapper.getComponent(editConfigStub).props("configEntries") as ConfigEntry[]
-  ).map(({ key, category }) => ({ key, category }));
+  return wrapper;
 }
 
-function entry(key: string, category: string): ConfigEntry {
+function formConfigEntries(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+  return wrapper
+    .getComponent(editConfigStub)
+    .props("configEntries") as ConfigEntry[];
+}
+
+function entry(
+  key: string,
+  category: string,
+  type = ConfigEntryType.STRING,
+): ConfigEntry {
   return {
     key,
     category,
-    type: ConfigEntryType.STRING,
+    type,
     label: key,
     default_value: null,
     required: false,
@@ -191,6 +285,24 @@ function playbackConfig(domain: string, streams: ConfigEntry[]): CoreConfig {
     players: [
       entry("volume_step", "generic"),
       entry("announce_tts_engine", "announcements"),
+      entry("log_level", "generic"),
+    ],
+  };
+  return coreConfig(domain, values[domain]);
+}
+
+function libraryConfig(domain: string): CoreConfig {
+  const values: Record<string, ConfigEntry[]> = {
+    streams: [
+      entry("bind_port", "generic"),
+      entry("stream_source_mode", "source_selection"),
+      entry("upgrade_below_quality", "source_selection"),
+      entry("buffer_size", "playback"),
+      entry("log_level", "generic"),
+    ],
+    music: [
+      entry("keep_remasters_apart", "generic", ConfigEntryType.BOOLEAN),
+      entry("reset_db", "generic", ConfigEntryType.ACTION),
       entry("log_level", "generic"),
     ],
   };

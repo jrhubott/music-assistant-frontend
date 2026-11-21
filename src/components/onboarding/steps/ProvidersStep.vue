@@ -1,65 +1,52 @@
 <template>
-  <section class="flex min-h-0 flex-col gap-4">
-    <p class="text-muted-foreground text-sm">{{ $t(descriptionKey) }}</p>
-
-    <ScrollFade>
-      <ItemGroup v-if="configured.length > 0" class="gap-2">
+  <div>
+    <OnboardingInvitation :features="features" :set-up="configured.length > 0">
+      <OnboardingList>
         <ConfiguredProviderItem
           v-for="provider in configured"
           :key="provider.instance_id"
           :provider="provider"
           data-testid="onboarding-configured-provider"
         />
-      </ItemGroup>
-
-      <Empty v-else class="border-border rounded-md border border-dashed py-6">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <component :is="icon" />
-          </EmptyMedia>
-          <EmptyTitle>{{ $t("onboarding.nothing_configured") }}</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
-    </ScrollFade>
-
-    <div>
-      <Button
-        :variant="configured.length > 0 ? 'secondary' : 'default'"
-        data-testid="onboarding-add-provider"
-        @click="showAddProviderDialog = true"
-      >
-        <Plus class="size-4" />
-        {{ $t(addLabelKey) }}
-      </Button>
-    </div>
+        <OnboardingAddRow
+          :label="$t(addLabelKey)"
+          data-testid="onboarding-add-provider"
+          @click="showAddProviderDialog = true"
+        />
+      </OnboardingList>
+    </OnboardingInvitation>
 
     <AddProviderDialog
       v-model:show="showAddProviderDialog"
       :provider-type="providerType"
       :audio-source-only="connectingApps"
     />
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
 import ConfiguredProviderItem from "@/components/onboarding/ConfiguredProviderItem.vue";
-import ScrollFade from "@/components/onboarding/ScrollFade.vue";
-import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { ItemGroup } from "@/components/ui/item";
+import OnboardingAddRow from "@/components/onboarding/OnboardingAddRow.vue";
+import OnboardingInvitation, {
+  type InvitationFeature,
+} from "@/components/onboarding/OnboardingInvitation.vue";
+import OnboardingList from "@/components/onboarding/OnboardingList.vue";
 import {
   configuredAudioSourcePlugins,
   configuredProviders,
 } from "@/composables/useOnboarding";
-import type { OnboardingStepId } from "@/helpers/onboarding";
+import type { OnboardingStepId, StepPrimaryAction } from "@/helpers/onboarding";
 import { ProviderType } from "@/plugins/api/interfaces";
 import AddProviderDialog from "@/views/settings/AddProviderDialog.vue";
-import { Music, Plus, Smartphone } from "@lucide/vue";
+import {
+  Airplay,
+  AudioLines,
+  HardDrive,
+  Headphones,
+  Music2,
+  Plus,
+  Radio,
+} from "@lucide/vue";
 import { computed, markRaw, ref } from "vue";
 
 const props = defineProps<{
@@ -87,17 +74,45 @@ const configured = computed(() =>
     : configuredProviders(props.providerType),
 );
 
-const descriptionKey = computed(() =>
-  connectingApps.value
-    ? "onboarding.steps.plugins.phone_apps_description"
-    : "onboarding.steps.music_sources.description",
-);
-
 const addLabelKey = computed(() =>
   connectingApps.value
     ? "onboarding.steps.plugins.connect"
     : "settings.add_music_provider",
 );
 
-const icon = computed(() => markRaw(connectingApps.value ? Smartphone : Music));
+const MUSIC_SOURCE_FEATURES: readonly InvitationFeature[] = [
+  {
+    icon: Headphones,
+    labelKey: "onboarding.steps.music_sources.features.streaming",
+  },
+  {
+    icon: HardDrive,
+    labelKey: "onboarding.steps.music_sources.features.files",
+  },
+  { icon: Radio, labelKey: "onboarding.steps.music_sources.features.radio" },
+];
+const MUSIC_APP_FEATURES: readonly InvitationFeature[] = [
+  { icon: Music2, labelKey: "onboarding.steps.plugins.features.apps" },
+  {
+    icon: AudioLines,
+    labelKey: "onboarding.steps.plugins.features.spotify_connect",
+  },
+  { icon: Airplay, labelKey: "onboarding.steps.plugins.features.airplay" },
+];
+
+const features = computed(() =>
+  connectingApps.value ? MUSIC_APP_FEATURES : MUSIC_SOURCE_FEATURES,
+);
+// until one is set up, adding one is the step's main button
+const primaryAction = computed<StepPrimaryAction | undefined>(() =>
+  configured.value.length > 0
+    ? undefined
+    : {
+        labelKey: addLabelKey.value,
+        icon: markRaw(Plus),
+        run: () => (showAddProviderDialog.value = true),
+      },
+);
+
+defineExpose({ primaryAction });
 </script>

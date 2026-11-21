@@ -333,8 +333,14 @@ import {
   canToggleSource,
   managesAllSources,
 } from "@/helpers/provider_permissions";
+import { goBack } from "@/helpers/navigation";
 import { confirmProviderRemoval } from "@/helpers/provider_removal";
 import { getProviderSettingsMenuItems } from "@/helpers/provider_settings_actions";
+import { providerPageEntries } from "@/helpers/settings_pages";
+import {
+  providerListingRoute,
+  providerListRoute,
+} from "@/helpers/settings_sections";
 import { getExternalLinkUrl, providerMarkdownToHtml } from "@/helpers/utils";
 import { api } from "@/plugins/api";
 import {
@@ -342,6 +348,7 @@ import {
   EventType,
   ProviderConfig,
   ProviderStatus,
+  ProviderType,
 } from "@/plugins/api/interfaces";
 import { eventbus } from "@/plugins/eventbus";
 import {
@@ -406,6 +413,13 @@ const allConfigEntries = computed(() => {
   return Object.values(config.value.values);
 });
 
+// the settings the provider's own settings page shows in place of this one
+const pageConfigEntries = computed(() =>
+  config.value
+    ? providerPageEntries(config.value.domain, allConfigEntries.value)
+    : [],
+);
+
 const providerManifest = computed(() => {
   if (!config.value) return undefined;
   return api.providerManifests[config.value.domain];
@@ -458,6 +472,16 @@ const documentationUrl = computed(() => {
 });
 
 // watchers
+// hidden from the form, while it still saves and guards their values; hidden
+// rather than left out, so the entries depending on them still resolve
+watch(
+  pageConfigEntries,
+  (entries) => {
+    for (const entry of entries) entry.hidden = true;
+  },
+  { immediate: true },
+);
+
 watch(
   () => props.instanceId,
   (val) => {
@@ -497,11 +521,14 @@ onBeforeUnmount(() => {
 });
 
 // methods
+const providersRoute = function () {
+  return config.value
+    ? providerListingRoute(config.value, providerManifest.value?.provides)
+    : providerListRoute(ProviderType.MUSIC);
+};
+
 const backToProviders = function () {
-  router.push({
-    name: "providersettings",
-    query: { types: config.value?.type },
-  });
+  goBack(router, providersRoute());
 };
 
 const resetToDefaults = function () {
@@ -607,7 +634,8 @@ const onRemove = function () {
       // the source is gone, and with it the page showing its settings; unsaved
       // edits have nothing left to save to, so they must not hold the way out
       editConfig.value?.discardChanges();
-      backToProviders();
+      // replaced, so going back never returns to the page of the removed source
+      router.replace(providersRoute());
     } catch (err) {
       toast.error(String(err));
     }
@@ -640,10 +668,7 @@ const onSubmit = async function (values: Record<string, ConfigValueType>) {
     )
     .then(() => {
       toast.success(t("settings.provider_saved"));
-      router.push({
-        name: "providersettings",
-        query: { types: config.value!.type },
-      });
+      backToProviders();
     })
     .catch((err) => {
       saveErrorMessage.value = String(err);
@@ -739,10 +764,7 @@ async function loadConfig(instanceId: string) {
     if (requestId === configLoadRequestId && props.instanceId === instanceId) {
       // a member only manages the music sources it owns, the rest is admin-only
       if (!canManageSource(updatedConfig)) {
-        router.replace({
-          name: "providersettings",
-          query: { types: updatedConfig.type },
-        });
+        router.replace(providerListRoute(ProviderType.MUSIC));
         return;
       }
       config.value = updatedConfig;

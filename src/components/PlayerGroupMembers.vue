@@ -86,12 +86,12 @@ import {
   getFollowerIds,
 } from "@/helpers/player_grouping";
 import { requestGroupPlaybackConfirmation } from "@/helpers/player_group_playback";
+import { playerSectionOf, playerSections } from "@/helpers/player_sections";
 import {
   canBeGroupMember,
   getPlayerDisplayName,
   getPlayerSetupReason,
   groupMemberPickerVisible,
-  isScreenPlayer,
 } from "@/helpers/players";
 import { api } from "@/plugins/api";
 import {
@@ -100,6 +100,13 @@ import {
   PlayerType,
 } from "@/plugins/api/interfaces";
 import { computed, onUnmounted, ref } from "vue";
+
+interface CandidateSection {
+  type: string;
+  label: string;
+  translateLabel: boolean;
+  players: Player[];
+}
 
 const props = withDefaults(
   defineProps<{
@@ -162,30 +169,15 @@ const candidateSections = computed(() => {
   const availableCandidates = props.groupHeading
     ? filteredCandidates.filter((player) => !isGroupMember(player))
     : filteredCandidates;
-  const sections = [
-    {
-      type: "players",
-      label: "players",
-      translateLabel: true,
-      players: availableCandidates.filter(
-        (player) => player.type !== PlayerType.LIGHT && !isScreenPlayer(player),
-      ),
-    },
-    {
-      type: "lights",
-      label: "lights",
-      translateLabel: true,
-      players: availableCandidates.filter(
-        (player) => player.type === PlayerType.LIGHT,
-      ),
-    },
-    {
-      type: "screens",
-      label: "screens",
-      translateLabel: true,
-      players: availableCandidates.filter((player) => isScreenPlayer(player)),
-    },
-  ];
+  const sections: CandidateSection[] = playerSections(
+    availableCandidates,
+    (player) => player.type,
+  ).map(({ key, label, items }) => ({
+    type: key,
+    label,
+    translateLabel: true,
+    players: items,
+  }));
   // lights in the group get a section of their own: they follow the group's
   // audio but are no speakers of it
   const groupedLights = groupedPlayers.filter(
@@ -210,7 +202,7 @@ const candidateSections = computed(() => {
       players: groupedSpeakers,
     });
   }
-  return sections.filter((section) => section.players.length > 0);
+  return sections;
 });
 
 function getCheckboxId(player: Player) {
@@ -242,10 +234,9 @@ function canGroupWithPlayer(player: Player) {
 }
 
 function matchesFilter(player: Player) {
-  if (props.filter === "all") return true;
-  if (props.filter === "lights") return player.type === PlayerType.LIGHT;
-  if (props.filter === "screens") return isScreenPlayer(player);
-  return player.type !== PlayerType.LIGHT && !isScreenPlayer(player);
+  return (
+    props.filter === "all" || playerSectionOf(player.type) === props.filter
+  );
 }
 
 function sortPlayers(players: Player[]) {

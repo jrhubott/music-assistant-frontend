@@ -1,3 +1,7 @@
+import SettingsFoldRows from "@/components/settings/SettingsFoldRows.vue";
+import SettingsPageFoldRow from "@/components/settings/SettingsPageFoldRow.vue";
+import SettingsPageHeader from "@/components/settings/SettingsPageHeader.vue";
+import SettingsViewModeToggle from "@/components/settings/SettingsViewModeToggle.vue";
 import { Scope } from "@/plugins/api/interfaces";
 import BackgroundTasks from "@/views/settings/BackgroundTasks.vue";
 import {
@@ -31,8 +35,6 @@ vi.mock("vue-i18n", async (importOriginal) => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
 
-const SETTINGS_ROW = '[data-testid="background-tasks-link-settings"]';
-
 enableAutoUnmount(afterEach);
 
 beforeEach(() => {
@@ -40,16 +42,32 @@ beforeEach(() => {
 });
 
 describe("BackgroundTasks", () => {
-  it("leads who may change the core settings to the task settings", async () => {
-    hasScope.mockImplementation(scopeChecker(BUILTIN_ROLE_SCOPES.admin));
+  it("heads the page with the header of the background tasks", async () => {
+    hasScope.mockImplementation(scopeChecker(BUILTIN_ROLE_SCOPES.user));
 
     const wrapper = await mountPage();
 
-    const row = wrapper.get(SETTINGS_ROW);
-    expect(JSON.parse(row.attributes("href")!)).toEqual({
-      name: "tasksettings",
+    expect(wrapper.getComponent(SettingsPageHeader).props("page")).toBe(
+      "background_tasks",
+    );
+  });
+
+  it("folds the task settings open in place above the tasks for who may change the core settings", async () => {
+    hasScope.mockImplementation(scopeChecker(BUILTIN_ROLE_SCOPES.admin));
+
+    const wrapper = await mountPage();
+    const card = wrapper.getComponent(SettingsFoldRows);
+
+    expect(card.getComponent(SettingsPageFoldRow).props()).toMatchObject({
+      page: "background_tasks",
+      label: "background_tasks.settings.title",
+      description: "background_tasks.settings.description",
     });
-    expect(row.text()).toContain("background_tasks.settings.title");
+    expect(
+      card.element.compareDocumentPosition(
+        wrapper.get(".tasks-header").element,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("leaves the task settings out for who may only read the tasks", async () => {
@@ -57,7 +75,7 @@ describe("BackgroundTasks", () => {
 
     const wrapper = await mountPage();
 
-    expect(wrapper.find(SETTINGS_ROW).exists()).toBe(false);
+    expect(wrapper.findComponent(SettingsFoldRows).exists()).toBe(false);
   });
 
   it("leaves the task settings out without the core write scope", async () => {
@@ -65,23 +83,37 @@ describe("BackgroundTasks", () => {
 
     const wrapper = await mountPage();
 
-    expect(wrapper.find(SETTINGS_ROW).exists()).toBe(false);
+    expect(wrapper.findComponent(SettingsFoldRows).exists()).toBe(false);
   });
+
+  it.each([
+    ["who may manage the tasks", BUILTIN_ROLE_SCOPES.admin],
+    ["who may only read them", BUILTIN_ROLE_SCOPES.user],
+  ])(
+    "switches the view from the header of the list, for %s",
+    async (_role, scopes) => {
+      hasScope.mockImplementation(scopeChecker(scopes));
+      const toggleViewMode = vi.fn();
+
+      const wrapper = await mountPage({ toggleViewMode });
+      const toggle = wrapper
+        .get(".tasks-header")
+        .getComponent(SettingsViewModeToggle);
+      toggle.vm.$emit("toggle");
+
+      expect(toggle.props("mode")).toBe("list");
+      expect(toggleViewMode).toHaveBeenCalledOnce();
+    },
+  );
 });
 
-async function mountPage() {
+async function mountPage({ toggleViewMode = vi.fn() } = {}) {
   const wrapper = shallowMount(BackgroundTasks, {
     global: {
       provide: {
-        tasksViewMode: { viewMode: ref("list"), toggleViewMode: vi.fn() },
+        tasksViewMode: { viewMode: ref("list"), toggleViewMode },
       },
-      stubs: {
-        RouterLink: {
-          props: ["to"],
-          template: '<a :href="JSON.stringify(to)"><slot /></a>',
-        },
-        SettingsLinkRows: false,
-      },
+      renderStubDefaultSlot: true,
     },
   });
   await flushPromises();

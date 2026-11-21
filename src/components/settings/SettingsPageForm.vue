@@ -11,10 +11,12 @@
         ref="editConfig"
         :config-entries="entries"
         :disabled="false"
+        :provider-domain="settingsPageProviderDomain(page)"
+        :flat="flat"
         inline-save
         @submit="onSubmit"
         @action="onAction"
-        @immediate-apply="save"
+        @immediate-apply="onImmediateApply"
       />
     </template>
 
@@ -42,9 +44,12 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useSettingsPage } from "@/composables/settings/useSettingsPage";
-import { useSettingsToolbarMenu } from "@/composables/useSettingsToolbarMenu";
+import { useSettingsPageMenu } from "@/composables/useSettingsPageMenu";
 import type { SettingsField } from "@/helpers/settings_form";
-import type { SettingsPageId } from "@/helpers/settings_pages";
+import {
+  settingsPageProviderDomain,
+  type SettingsPageId,
+} from "@/helpers/settings_pages";
 import type { ConfigEntry, ConfigValueType } from "@/plugins/api/interfaces";
 import { $t } from "@/plugins/i18n";
 import EditConfig from "@/views/settings/EditConfig.vue";
@@ -60,9 +65,12 @@ const props = defineProps<{
   page: SettingsPageId;
   // settings the page edits with controls of its own, in the custom slot
   customSettings?: readonly SettingsField[];
-  // the form is a part of a page about something else, so the toolbar's menu
-  // does not offer to reset it
+  // the form is a part of a page about something else, so it leaves the
+  // page's menu to the page and offers no reset there
   embedded?: boolean;
+  // the form sits in a frame that names it, so it draws no card or title of
+  // its own
+  flat?: boolean;
 }>();
 
 defineSlots<{
@@ -80,6 +88,8 @@ const emit = defineEmits<{
   // the settings were reset to their defaults, for the page to reset the
   // controls of its custom settings
   reset: [];
+  // the changes of the form were saved
+  saved: [];
 }>();
 
 const editConfig = ref<InstanceType<typeof EditConfig>>();
@@ -125,12 +135,14 @@ const resetToDefaults = function () {
   emit("reset");
 };
 
-// the toolbar's menu resets the form while it is on screen
-const toolbarMenu = useSettingsToolbarMenu();
+// the page's menu resets the form while it is on screen; an embedded form
+// leaves the menu to the page
+const pageMenu = useSettingsPageMenu();
 watch(
-  () => !props.embedded && showForm.value && loaded.value,
+  () => showForm.value && loaded.value,
   (resettable) => {
-    toolbarMenu.value = resettable
+    if (props.embedded) return;
+    pageMenu.value = resettable
       ? [
           {
             label: "settings.reset_to_defaults",
@@ -143,8 +155,18 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => {
-  toolbarMenu.value = [];
+  if (!props.embedded) pageMenu.value = [];
 });
+
+// an entry that applies the moment it changes is saved on its own; the api
+// reports a failed save itself
+const onImmediateApply = async function (
+  values: Record<string, ConfigValueType>,
+) {
+  if (!(await save(values))) return;
+  toast.success($t("settings.settings_saved"));
+  emit("saved");
+};
 
 const onSubmit = async function (values: Record<string, ConfigValueType>) {
   if (!(await save(values))) {
@@ -154,5 +176,6 @@ const onSubmit = async function (values: Record<string, ConfigValueType>) {
   // the form stays on screen, so it takes the saved values as its baseline
   editConfig.value?.saveSucceeded(values);
   toast.success($t("settings.settings_saved"));
+  emit("saved");
 };
 </script>

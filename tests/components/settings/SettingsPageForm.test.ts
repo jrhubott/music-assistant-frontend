@@ -1,15 +1,17 @@
 import SettingsPageForm from "@/components/settings/SettingsPageForm.vue";
-import { useSettingsToolbarMenu } from "@/composables/useSettingsToolbarMenu";
+import { useSettingsPageMenu } from "@/composables/useSettingsPageMenu";
 import { coreOwner } from "@/helpers/settings_pages";
 import type { MusicAssistantApi } from "@/plugins/api";
 import {
   ConfigEntryType,
+  ProviderType,
   Scope,
   type ConfigEntry,
   type CoreConfig,
 } from "@/plugins/api/interfaces";
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { providerConfig } from "../../fixtures/providerConfig";
 
 const { apiMock, hasScope, toastMock } = vi.hoisted(() => ({
   apiMock: {
@@ -17,6 +19,8 @@ const { apiMock, hasScope, toastMock } = vi.hoisted(() => ({
     invokeCoreConfigAction:
       vi.fn<MusicAssistantApi["invokeCoreConfigAction"]>(),
     saveCoreConfig: vi.fn<MusicAssistantApi["saveCoreConfig"]>(),
+    getProviderConfig: vi.fn<MusicAssistantApi["getProviderConfig"]>(),
+    getProviderConfigs: vi.fn<MusicAssistantApi["getProviderConfigs"]>(),
   },
   hasScope: vi.fn<(scope: Scope) => boolean>(),
   toastMock: { error: vi.fn(), success: vi.fn() },
@@ -27,10 +31,10 @@ vi.mock("@/plugins/auth", () => ({ authManager: { hasScope } }));
 vi.mock("@/plugins/i18n", () => ({ $t: (key: string) => key }));
 vi.mock("vue-sonner", () => ({ toast: toastMock }));
 // one menu for the test to read what the form publishes into it
-vi.mock("@/composables/useSettingsToolbarMenu", async () => {
+vi.mock("@/composables/useSettingsPageMenu", async () => {
   const { ref } = await import("vue");
   const menu = ref([]);
-  return { useSettingsToolbarMenu: () => menu };
+  return { useSettingsPageMenu: () => menu };
 });
 
 enableAutoUnmount(afterEach);
@@ -51,6 +55,8 @@ const editConfigStub = {
     disabled: Boolean,
     inlineSave: Boolean,
     hideHeader: Boolean,
+    flat: Boolean,
+    providerDomain: String,
   },
   emits: ["submit", "action", "immediateApply"],
   setup() {
@@ -61,6 +67,7 @@ const editConfigStub = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useSettingsPageMenu().value = [];
   hasScope.mockReturnValue(true);
   apiMock.getCoreConfig.mockResolvedValue(streamsConfig());
   apiMock.saveCoreConfig.mockResolvedValue(streamsConfig());
@@ -121,6 +128,52 @@ describe("SettingsPageForm", () => {
     ).toEqual(["background_scan_concurrency"]);
     expect(form.props("inlineSave")).toBe(true);
     expect(form.props("hideHeader")).toBe(false);
+    expect(form.props("flat")).toBe(false);
+    expect(form.props("providerDomain")).toBeUndefined();
+  });
+
+  it("hands a flat form to a host that frames it", async () => {
+    const wrapper = await mountForm({ flat: true });
+
+    const form = wrapper.getComponent(editConfigStub);
+    expect(form.props("flat")).toBe(true);
+    expect(form.props("inlineSave")).toBe(true);
+  });
+
+  it("names the provider to the form of a page showing its settings", async () => {
+    const config = providerConfig({
+      domain: "hass",
+      type: ProviderType.PLUGIN,
+      values: {
+        power_controls: {
+          key: "power_controls",
+          category: "player_controls",
+          type: ConfigEntryType.STRING,
+          multi_value: true,
+          label: "power_controls",
+          default_value: [],
+          required: true,
+          options: [],
+          value: [],
+        },
+      },
+    });
+    // the list of provider configs comes without their entries
+    apiMock.getProviderConfigs.mockResolvedValue([{ ...config, values: {} }]);
+    apiMock.getProviderConfig.mockResolvedValue(config);
+
+    const wrapper = mount(SettingsPageForm, {
+      props: { page: "home_assistant" },
+      global: { stubs: { EditConfig: editConfigStub } },
+    });
+    await flushPromises();
+
+    const form = wrapper.getComponent(editConfigStub);
+    expect(form.props("providerDomain")).toBe("hass");
+    // the entity pickers match on the keys the provider has
+    expect(
+      (form.props("configEntries") as ConfigEntry[]).map((e) => e.key),
+    ).toEqual(["power_controls"]);
   });
 
   it("saves the changes and keeps the form on screen", async () => {
@@ -138,6 +191,7 @@ describe("SettingsPageForm", () => {
       background_scan_concurrency: 4,
     });
     expect(toastMock.success).toHaveBeenCalledWith("settings.settings_saved");
+    expect(wrapper.emitted("saved")).toHaveLength(1);
     // the form captures its baseline once, so it keeps the same entries
     expect(wrapper.getComponent(editConfigStub).props("configEntries")).toBe(
       entries,
@@ -156,9 +210,10 @@ describe("SettingsPageForm", () => {
     expect(saveFailed).toHaveBeenCalledOnce();
     expect(saveSucceeded).not.toHaveBeenCalled();
     expect(toastMock.success).not.toHaveBeenCalled();
+    expect(wrapper.emitted("saved")).toBeUndefined();
   });
 
-  it("applies an immediate change without a toast", async () => {
+  it("saves an immediate change on its own, and says so", async () => {
     const wrapper = await mountForm();
 
     await wrapper
@@ -169,13 +224,29 @@ describe("SettingsPageForm", () => {
     expect(apiMock.saveCoreConfig).toHaveBeenCalledWith("streams", {
       background_scan_concurrency: 4,
     });
-    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalledExactlyOnceWith(
+      "settings.settings_saved",
+    );
+    expect(wrapper.emitted("saved")).toHaveLength(1);
   });
 
-  it("offers a reset of the form in the toolbar menu", async () => {
+  it("confirms no immediate change the server refused", async () => {
+    apiMock.saveCoreConfig.mockRejectedValueOnce(new Error("refused"));
+    const wrapper = await mountForm();
+
+    await wrapper
+      .getComponent(editConfigStub)
+      .vm.$emit("immediateApply", { background_scan_concurrency: 4 });
+    await flushPromises();
+
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(wrapper.emitted("saved")).toBeUndefined();
+  });
+
+  it("offers a reset of the form in the page menu", async () => {
     await mountForm();
 
-    const [reset] = useSettingsToolbarMenu().value;
+    const [reset] = useSettingsPageMenu().value;
     expect(reset.label).toBe("settings.reset_to_defaults");
     reset.action?.();
 
@@ -187,22 +258,32 @@ describe("SettingsPageForm", () => {
 
     await mountForm();
 
-    expect(useSettingsToolbarMenu().value).toEqual([]);
+    expect(useSettingsPageMenu().value).toEqual([]);
   });
 
-  it("leaves the toolbar menu to a page the form is a part of", async () => {
+  it("leaves the page menu to a page the form is a part of", async () => {
     const wrapper = await mountForm({ embedded: true });
 
     expect(wrapper.find('[data-testid="edit-config"]').exists()).toBe(true);
-    expect(useSettingsToolbarMenu().value).toEqual([]);
+    expect(useSettingsPageMenu().value).toEqual([]);
   });
 
-  it("takes the reset out of the toolbar menu when it closes", async () => {
+  it("keeps what the page it is a part of put in the menu", async () => {
+    const pageItem = { label: "settings.reload", action: vi.fn() };
+    useSettingsPageMenu().value = [pageItem];
+
+    const wrapper = await mountForm({ embedded: true });
+    wrapper.unmount();
+
+    expect(useSettingsPageMenu().value).toEqual([pageItem]);
+  });
+
+  it("takes the reset out of the page menu when it closes", async () => {
     const wrapper = await mountForm();
 
     wrapper.unmount();
 
-    expect(useSettingsToolbarMenu().value).toEqual([]);
+    expect(useSettingsPageMenu().value).toEqual([]);
   });
 });
 
@@ -257,7 +338,7 @@ describe("SettingsPageForm with settings the page edits itself", () => {
     const wrapper = await mountCustom(customSettings);
     await wrapper.get('[data-testid="custom"] button').trigger("click");
 
-    useSettingsToolbarMenu().value[0].action?.();
+    useSettingsPageMenu().value[0].action?.();
 
     const entries = wrapper
       .getComponent(editConfigStub)
@@ -292,7 +373,7 @@ describe("SettingsPageForm with settings the page edits itself", () => {
   }
 });
 
-async function mountForm(props: { embedded?: boolean } = {}) {
+async function mountForm(props: { embedded?: boolean; flat?: boolean } = {}) {
   const wrapper = mount(SettingsPageForm, {
     props: { page: "audio_analysis", ...props },
     global: { stubs: { EditConfig: editConfigStub } },

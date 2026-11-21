@@ -60,6 +60,8 @@ import {
   type SortOptionInfo,
   type User,
   type UserSummary,
+  type AIEngine,
+  type AIEngineUsage,
   AlbumType,
   Audiobook,
   AuthExchangeResult,
@@ -105,12 +107,12 @@ import {
   SortField,
   SmartPlaylistRules,
   SoundEffect,
+  SpeakerChannel,
   StatisticsTopItemResult,
   StatisticsUsers,
   SourceFolder,
   StorageInfo,
   StorageLocation,
-  StreamServerInfo,
   TranscriptCue,
   MediaCollection,
   ArtistType,
@@ -1356,6 +1358,25 @@ export class MusicAssistantApi {
     });
   }
 
+  public generateShareLink(uri: string): Promise<string> {
+    return this.sendCommand(
+      "share/generate",
+      { uri },
+      { suppressGlobalError: true },
+    );
+  }
+
+  public resolveSharedItem(
+    encoded: string,
+    allow_search = true,
+  ): Promise<MediaItemType | null> {
+    return this.sendCommand(
+      "share/resolve",
+      { encoded, allow_search },
+      { suppressGlobalError: true },
+    );
+  }
+
   public migratePlaylist(
     db_playlist_id: string | number,
     destination_provider: string,
@@ -2151,6 +2172,7 @@ export class MusicAssistantApi {
     provider: string,
     item_id: string,
     providers?: string[],
+    hidePlayed?: boolean,
   ): Promise<MediaItemTypeOrItemMapping[]> {
     // Fetches a single recommendation row's items. Per-row timeout/error
     // isolation lives server-side: an unknown id or a failing provider
@@ -2159,12 +2181,14 @@ export class MusicAssistantApi {
     // global error toast.
     // providers: source provider instance ids to include (only rows with
     // supports_provider_filter accept this); omit for the unfiltered row.
+    // hidePlayed: leave out fully played podcast episodes and audiobooks.
     return this.sendCommand(
       "music/recommendations/items",
       {
         provider,
         item_id,
         providers,
+        ...(hidePlayed && { hide_played: true }),
       },
       { suppressGlobalError: true },
     );
@@ -2870,6 +2894,44 @@ export class MusicAssistantApi {
     });
   }
 
+  /**
+   * Combine speakers into one new multi-channel player, and return that player.
+   * The output of each speaker on the provider moves into it.
+   *
+   * @param provider The instance id of the provider whose speakers to combine.
+   * @param name The name of the new player.
+   * @param members The channel each speaker plays, by the player id of the speaker.
+   */
+  public createMultiChannelPlayer(
+    provider: string,
+    name: string,
+    members: Record<string, SpeakerChannel>,
+  ): Promise<Player> {
+    return this.sendCommand("players/create_multi_channel_player", {
+      provider,
+      name,
+      members,
+    });
+  }
+
+  /**
+   * Return the ids of the players whose output on a provider can be a speaker of a new
+   * multi-channel player.
+   *
+   * @param provider The instance id of the provider that combines the speakers.
+   * @param options Options for the command, such as keeping a failure quiet.
+   */
+  public getMultiChannelCandidates(
+    provider: string,
+    options?: CommandOptions,
+  ): Promise<string[]> {
+    return this.sendCommand(
+      "players/multi_channel_candidates",
+      { provider },
+      options,
+    );
+  }
+
   public playerCommandGroupSelectSource(
     playerId: string,
     source: string,
@@ -3036,13 +3098,17 @@ export class MusicAssistantApi {
     );
   }
 
-  public getShareCandidates(): Promise<UserSummary[]> {
+  public getShareCandidates(includeGuests = false): Promise<UserSummary[]> {
     // Get the users a music source or playlist can be shared with, the caller
     // included.
-    return this.sendCommand("config/providers/share_candidates", undefined, {
-      // callers show their own error toast; avoid a duplicate global one
-      suppressGlobalError: true,
-    });
+    return this.sendCommand(
+      "config/providers/share_candidates",
+      includeGuests ? { include_guests: true } : undefined,
+      {
+        // callers show their own error toast; avoid a duplicate global one
+        suppressGlobalError: true,
+      },
+    );
   }
 
   public getCatalogRecommendations(): Promise<CatalogRecommendation[]> {
@@ -3129,9 +3195,12 @@ export class MusicAssistantApi {
     });
   }
 
-  public async getPlayerConfig(player_id: string): Promise<PlayerConfig> {
+  public async getPlayerConfig(
+    player_id: string,
+    options?: CommandOptions,
+  ): Promise<PlayerConfig> {
     // Return configuration for a single player.
-    return this.sendCommand("config/players/get", { player_id });
+    return this.sendCommand("config/players/get", { player_id }, options);
   }
 
   public async getPlayerConfigEntries(
@@ -3409,15 +3478,17 @@ export class MusicAssistantApi {
   public async saveCoreConfig(
     domain: string,
     values: Record<string, ConfigValueType>,
+    options?: CommandOptions,
   ): Promise<CoreConfig> {
     // Save Core controller Config.
     // domain: (mandatory) domain of the core controller.
     // values: the raw values for config entries that need to be stored/updated.
     // action: [optional] action key called from config entries UI.
-    const config = await this.sendCommand<CoreConfig>("config/core/save", {
-      domain,
-      values,
-    });
+    const config = await this.sendCommand<CoreConfig>(
+      "config/core/save",
+      { domain, values },
+      options,
+    );
     this._coreConfigValues.clear();
     return config;
   }
@@ -4051,6 +4122,18 @@ export class MusicAssistantApi {
     return this.accountApi.disableUser(userId);
   }
 
+  // AI methods
+
+  public async getAIEngines(): Promise<AIEngine[]> {
+    // Return the available AI engines of all kinds.
+    return this.sendCommand<AIEngine[]>("ai/engines");
+  }
+
+  public async getAIUsage(): Promise<AIEngineUsage[]> {
+    // Return each engine setting of the core modules and providers, with its engine.
+    return this.sendCommand<AIEngineUsage[]>("ai/usage");
+  }
+
   // Remote Access methods
 
   public async getRemoteAccessInfo(): Promise<RemoteAccessInfo> {
@@ -4065,19 +4148,6 @@ export class MusicAssistantApi {
     return this.sendCommand<RemoteAccessInfo>("remote_access/configure", {
       enabled,
     });
-  }
-
-  // Stream server methods
-
-  public async getStreamServerInfo(
-    options?: CommandOptions,
-  ): Promise<StreamServerInfo> {
-    // Get the address the stream server hands to players
-    return this.sendCommand<StreamServerInfo>(
-      "streams/info",
-      undefined,
-      options,
-    );
   }
 
   // Storage methods
