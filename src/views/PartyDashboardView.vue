@@ -445,9 +445,9 @@ const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown wheneve
 const leaderboardSpace = ref(0); // px the corner leaderboard takes from the bottom
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
-const antiBurnIn = ref(false); // Swap QR/track sides periodically
+const antiBurnIn = ref(false); // Swap QR/track sides between songs
 const swapped = ref(false); // Current swap state for anti burn-in
-let burnInInterval: ReturnType<typeof setInterval> | null = null;
+let lastBurnInSwap = 0;
 const accessError = ref("");
 const showGuestAccessDialog = ref(false);
 const guestAccessSaving = ref(false);
@@ -855,27 +855,28 @@ const handleVisibilityChange = () => {
 };
 
 // Lifecycle and event subscriptions
-const BURN_IN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
+const BURN_IN_MIN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
 
 // onMounted subscribes after its awaits, where the component is no longer the
 // active instance and onBeforeUnmount would be a no-op, so the subscriptions
 // are collected here for the unmount hook registered at setup level.
 const unsubscribers: Array<() => void> = [];
 
-watch(antiBurnIn, (enabled) => {
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
-  }
-  if (enabled) {
-    swapped.value = false;
-    burnInInterval = setInterval(() => {
-      swapped.value = !swapped.value;
-    }, BURN_IN_SWAP_MS);
-  } else {
-    swapped.value = false;
-  }
+watch(antiBurnIn, () => {
+  swapped.value = false;
+  lastBurnInSwap = Date.now();
 });
+
+// Moving the layout mid-song would pull the lyrics away from whoever is singing.
+watch(
+  () => store.curQueueItem?.queue_item_id,
+  (queueItemId) => {
+    if (!antiBurnIn.value || !queueItemId) return;
+    if (Date.now() - lastBurnInSwap < BURN_IN_MIN_SWAP_MS) return;
+    swapped.value = !swapped.value;
+    lastBurnInSwap = Date.now();
+  },
+);
 
 onMounted(async () => {
   // Registered before the first await, so that leaving the view while one is
@@ -965,10 +966,6 @@ onBeforeUnmount(() => {
   if (wakeLock) {
     wakeLock.release();
     wakeLock = null;
-  }
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
   }
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });

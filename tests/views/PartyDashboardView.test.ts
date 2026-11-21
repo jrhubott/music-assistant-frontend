@@ -578,3 +578,62 @@ describe("PartyDashboardView party settings", () => {
     expect(view.find(PARTY_SETTINGS).exists()).toBe(false);
   });
 });
+
+describe("PartyDashboardView anti burn-in", () => {
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  const START_MS = 1_000_000;
+  const song = (id: string) => ({ queue_item_id: id }) as QueueItem;
+  const isSwapped = (view: VueWrapper) =>
+    view.get(".karaoke-qr").attributes("style")?.includes("right: 2vw") ??
+    false;
+
+  let now: ReturnType<typeof vi.spyOn>;
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+    partyConfig.current = null;
+    store.curQueueItem = undefined;
+    now.mockRestore();
+  });
+
+  const mountBurnInView = async () => {
+    now = vi.spyOn(Date, "now").mockReturnValue(START_MS);
+    store.curQueueItem = song("first");
+    partyConfig.current = { karaoke_mode: true, anti_burn_in: true };
+    return mountView();
+  };
+
+  const changeSong = async (id: string, atMs: number) => {
+    now.mockReturnValue(START_MS + atMs);
+    store.curQueueItem = song(id);
+    await flushPromises();
+  };
+
+  it("stays put during a song however long it runs", async () => {
+    const view = await mountBurnInView();
+
+    now.mockReturnValue(START_MS + TEN_MINUTES_MS * 3);
+    await flushPromises();
+
+    expect(isSwapped(view)).toBe(false);
+  });
+
+  it("does not swap on a song change inside ten minutes", async () => {
+    const view = await mountBurnInView();
+
+    await changeSong("second", TEN_MINUTES_MS - 1);
+
+    expect(isSwapped(view)).toBe(false);
+  });
+
+  it("swaps at the first song change after ten minutes", async () => {
+    const view = await mountBurnInView();
+
+    await changeSong("second", TEN_MINUTES_MS);
+    expect(isSwapped(view)).toBe(true);
+
+    await changeSong("third", TEN_MINUTES_MS + 1);
+    expect(isSwapped(view)).toBe(true);
+  });
+});
