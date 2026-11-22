@@ -5,6 +5,7 @@
     {
       "edge_branch": "edge",
       "base_branch": "main",
+      "strategy": "rebuild",
       "features": [
         "feature/party-kiosk-link",
         "feature/party-enhancements"

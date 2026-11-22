@@ -3,6 +3,8 @@ name: Fork sync
 on:
   schedule:
     - cron: "30 4 * * *" # after the 03:45 UTC server nightly tag
+    # picks up pushes to the listed feature branches, on the upstream commit edge already has
+    - cron: "47 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -14,6 +16,10 @@ on:
         type: choice
         options: [all, edge, stable]
         default: all
+      features_only:
+        description: "Edge: apply feature changes without taking newer upstream"
+        type: boolean
+        default: false
 
 concurrency:
   group: fork-sync
@@ -28,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         # a scheduled run (no inputs) and "all" sync both branches
-        target: ${{ fromJSON((inputs.target == '' || inputs.target == 'all') && '["edge","stable"]' || format('["{0}"]', inputs.target)) }}
+        target: ${{ fromJSON(github.event.schedule == '47 * * * *' && '["edge"]' || ((inputs.target == '' || inputs.target == 'all') && '["edge","stable"]' || format('["{0}"]', inputs.target))) }}
     name: sync (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -64,4 +70,5 @@ jobs:
           CI: true
         run: |
           python3 tools/fork_sync.py --config tools/fork-sync.json --repo-dir repo \
-            --target ${{ matrix.target }} ${{ inputs.dry_run && '--dry-run' || '' }}
+            --target ${{ matrix.target }} ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ (github.event.schedule == '47 * * * *' || inputs.features_only) && '--features-only' || '' }}
