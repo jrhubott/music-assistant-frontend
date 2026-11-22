@@ -9,7 +9,7 @@
       )
     "
     :style="{
-      bottom: 'var(--party-player-bottom)',
+      bottom: 'calc(var(--party-player-bottom) + var(--party-tip-bar, 0px))',
       left: 'var(--party-player-right)',
     }"
     :aria-label="$t('providers.party.leaderboard_title')"

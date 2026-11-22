@@ -1,63 +1,35 @@
 <template>
   <div
-    v-if="tips.length"
-    :class="
-      cn(
-        'pointer-events-none flex w-full max-w-[36rem] flex-col items-center gap-[0.8vh]',
-        compact && 'max-w-full',
-      )
-    "
+    class="pointer-events-none absolute inset-x-0 bottom-[var(--party-player-bottom,0px)] z-10 flex h-[var(--party-tip-bar)] items-center justify-center px-[2vw] text-[clamp(0.625rem,min(2.6vh,2.4vw),2.4rem)] leading-snug"
     role="status"
     aria-live="polite"
   >
-    <!-- reserves two lines so a shorter tip doesn't resize the QR above it -->
-    <div
-      :class="
-        cn(
-          'flex min-h-[calc(2lh+1.2vh)] w-full items-center justify-center text-[clamp(0.8rem,1.6vh,1.4rem)] leading-snug',
-          compact && 'text-[clamp(0.7rem,1.4vh,1.2rem)]',
-        )
-      "
-    >
-      <Transition name="tip" mode="out-in">
-        <div
-          :key="tip"
-          :class="
-            cn(
-              'flex max-w-full items-center gap-[0.8vh] rounded-[1.8vh] border border-white/25 bg-white/10 px-[1.4vh] py-[0.5vh] font-medium text-white/85',
-              !lightText && 'border-black/15 bg-black/5 text-foreground/80',
-            )
-          "
-        >
-          <component
-            :is="TIP_ICONS[tip]"
-            class="size-[clamp(14px,1.8vh,26px)] shrink-0"
-            aria-hidden="true"
-          />
-          <span class="line-clamp-2">
-            {{ $t(`providers.party.tips.${tip}`, partyTipValues(tip, config)) }}
-          </span>
-        </div>
-      </Transition>
-    </div>
-    <div v-if="tips.length > 1" class="flex gap-[0.5vh]" aria-hidden="true">
-      <span
-        v-for="(dotTip, dot) in tips"
-        :key="dotTip"
+    <Transition name="tip" mode="out-in">
+      <div
+        :key="tip"
         :class="
           cn(
-            'size-[0.6vh] rounded-full bg-current opacity-20 transition-opacity duration-500',
-            dot === index && 'opacity-60',
+            'flex max-w-full items-center gap-[0.6em] rounded-full border border-white/25 bg-white/10 px-[0.9em] py-[0.15em] font-medium text-white/85',
+            !lightText && 'border-black/15 bg-black/5 text-foreground/80',
           )
         "
-      ></span>
-    </div>
+      >
+        <component
+          :is="TIP_ICONS[tip]"
+          class="size-[1.1em] shrink-0"
+          aria-hidden="true"
+        />
+        <span class="truncate">
+          {{ $t(`providers.party.tips.${tip}`, partyTipValues(tip, config)) }}
+        </span>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { usePartyConfig } from "@/composables/usePartyConfig";
-import { type PartyTip, partyTips, partyTipValues } from "@/helpers/party_tips";
+import { type PartyTip, partyTipValues } from "@/helpers/party_tips";
 import { cn } from "@/lib/utils";
 import { $t } from "@/plugins/i18n";
 import {
@@ -76,11 +48,8 @@ import {
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
-  guestAccess: boolean;
-  queueEmpty: boolean;
+  tips: PartyTip[];
   lightText: boolean;
-  // narrower, smaller caption for the karaoke corner QR
-  compact?: boolean;
 }>();
 
 const TIP_MS = 12_000;
@@ -98,24 +67,23 @@ const TIP_ICONS: Record<PartyTip, LucideIcon> = {
 };
 
 const { config } = usePartyConfig();
-const tips = computed(() =>
-  partyTips(config.value, props.guestAccess, props.queueEmpty),
-);
-
 const index = ref(0);
 const tip = computed(
-  () => tips.value[index.value % Math.max(tips.value.length, 1)],
+  () => props.tips[index.value % Math.max(props.tips.length, 1)],
 );
 
 // a tip list that gets shorter can leave the index past its end
-watch(tips, (list) => {
-  if (index.value >= list.length) index.value = 0;
-});
+watch(
+  () => props.tips,
+  (list) => {
+    if (index.value >= list.length) index.value = 0;
+  },
+);
 
 let timer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   timer = setInterval(() => {
-    index.value = (index.value + 1) % Math.max(tips.value.length, 1);
+    index.value = (index.value + 1) % Math.max(props.tips.length, 1);
   }, TIP_MS);
 });
 onBeforeUnmount(() => {

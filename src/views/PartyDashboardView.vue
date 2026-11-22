@@ -1,5 +1,8 @@
 <template>
-  <div class="party-view" :style="gradientBackgroundStyle">
+  <div
+    :class="['party-view', { 'party-view--tips': showTipBar }]"
+    :style="gradientBackgroundStyle"
+  >
     <!-- MilkDrop visualizer takes over the backdrop when enabled -->
     <VisualizerCanvas
       v-if="visualizerActive"
@@ -99,7 +102,7 @@
 
           <!-- Fullscreen: minimize button -->
           <Button
-            v-if="isFullscreen && !hideBackButton"
+            v-if="showMinimizeButton"
             variant="ghost-icon"
             size="icon-sm"
             :aria-label="$t('tooltip.exit_fullscreen')"
@@ -122,6 +125,7 @@
             </Button>
             <ShowDashboardButton dashboard="party" />
             <Button
+              v-if="!antiBurnIn"
               variant="ghost-icon"
               size="icon-sm"
               :aria-label="$t('tooltip.enter_fullscreen')"
@@ -141,12 +145,6 @@
           :style="swapped ? { left: 'auto', right: '2vw' } : undefined"
         >
           <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
-          <PartyTipCaption
-            :guest-access="qrAvailable"
-            :queue-empty="queueEmpty"
-            :light-text="useLightChrome"
-            compact
-          />
         </div>
 
         <div
@@ -227,17 +225,7 @@
             class="qr-wrapper"
             :style="swapped && displayLyrics ? { order: 1 } : undefined"
           >
-            <div class="qr-wrapper__code">
-              <PartyQR
-                :qr-dark="qrDarkColor"
-                @available="qrAvailable = $event"
-              />
-            </div>
-            <PartyTipCaption
-              :guest-access="qrAvailable"
-              :queue-empty="queueEmpty"
-              :light-text="useLightChrome"
-            />
+            <PartyQR :qr-dark="qrDarkColor" @available="qrAvailable = $event" />
           </div>
           <div
             v-if="displayLyrics"
@@ -312,6 +300,11 @@
         </div>
       </template>
     </div>
+    <PartyTipCaption
+      v-if="showTipBar"
+      :tips="tips"
+      :light-text="useLightChrome"
+    />
     <!-- Reactions, request animations and the leaderboard -->
     <PartyScreenExtras
       v-if="!accessError"
@@ -378,6 +371,7 @@ import { Button } from "@/components/ui/button";
 import { useLyricsElapsedTime } from "@/composables/lyrics/useLyricsElapsedTime";
 import { usePartyConfig } from "@/composables/usePartyConfig";
 import { useVisualizer } from "@/composables/visualizer/useVisualizer";
+import { partyTips } from "@/helpers/party_tips";
 import {
   ImageColorPalette,
   getMediaItemImage,
@@ -483,6 +477,9 @@ const toggleGuestAccess = async () => {
 const requestBadgeColor = ref("");
 const boostBadgeColor = ref("");
 const isFullscreen = computed(() => store.frameless);
+const showMinimizeButton = computed(
+  () => isFullscreen.value && !hideBackButton.value && !antiBurnIn.value,
+);
 const colorMode = useColorMode();
 const isDark = computed(() => colorMode.value === "dark");
 const darkBackground = computed(
@@ -672,6 +669,10 @@ const visibleItems = computed(() => {
 const queueEmpty = computed(
   () => !store.curQueueItem && !visibleItems.value.length,
 );
+const tips = computed(() =>
+  partyTips(partyConfig.value, qrAvailable.value, queueEmpty.value),
+);
+const showTipBar = computed(() => !accessError.value && tips.value.length > 0);
 
 // Helper to compute position for each item
 const getPosition = (item: QueueItem) => {
@@ -1040,6 +1041,21 @@ watch(
   transition: background-image 0.8s ease-in-out;
 }
 
+.party-view--tips {
+  --party-tip-bar: clamp(2.25rem, 5vh, 4.5rem);
+  --party-bottom-reserve: calc(
+    var(--party-player-bottom, 0px) + var(--party-tip-bar) + 1vh
+  );
+}
+
+.party-view--tips .party-content {
+  padding-bottom: var(--party-bottom-reserve);
+}
+
+.party-view--tips .karaoke-track-stack {
+  padding-bottom: 0;
+}
+
 .party-content--album-art,
 .party-content--album-art *,
 .party-content--light-text,
@@ -1066,9 +1082,14 @@ watch(
   justify-content: center;
   align-self: center;
   height: 60vh;
-  /* keep the QR and its tip clear of the leaderboard in the corner below */
-  max-height: calc(100% - var(--party-leaderboard-space, 0px));
-  margin-bottom: var(--party-leaderboard-space, 0px);
+  /* keep the QR clear of the leaderboard in the corner below; the content
+     padding already covers the part of that space taken by the tip bar */
+  --party-qr-clearance: max(
+    0px,
+    var(--party-leaderboard-space, 0px) - var(--party-bottom-reserve, 0px)
+  );
+  max-height: calc(100% - var(--party-qr-clearance));
+  margin-bottom: var(--party-qr-clearance);
 }
 
 .qr-wrapper {
@@ -1079,13 +1100,6 @@ watch(
   align-items: center;
   justify-content: center;
   gap: 1.5vh;
-}
-
-/* the QR sizes itself to this box, so it shrinks to leave the tip room */
-.qr-wrapper__code {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
 }
 
 .qr-section--with-lyrics {

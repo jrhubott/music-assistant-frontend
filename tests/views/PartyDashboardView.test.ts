@@ -693,4 +693,18 @@ describe("PartyDashboardView anti burn-in", () => {
     await changeSong("third", TEN_MINUTES_MS + 1);
     expect(isSwapped(view)).toBe(true);
   });
+
+  it.each([
+    [false, ENTER_FULLSCREEN],
+    [true, EXIT_FULLSCREEN],
+  ])(
+    "hides the fullscreen button (frameless: %s)",
+    async (frameless, button) => {
+      store.frameless = frameless;
+      const view = await mountBurnInView();
+
+      expect(view.find(button).exists()).toBe(false);
+      store.frameless = false;
+    },
+  );
 });
