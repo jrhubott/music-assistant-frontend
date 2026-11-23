@@ -8,10 +8,7 @@
         !lightText && 'bg-white/55 text-foreground',
       )
     "
-    :style="{
-      bottom: 'calc(var(--party-player-bottom) + var(--party-tip-bar, 0px))',
-      left: 'var(--party-player-right)',
-    }"
+    :style="cornerStyle"
     :aria-label="$t('providers.party.leaderboard_title')"
   >
     <div class="mb-[0.8vh] flex items-center gap-[1vh] font-bold">
@@ -62,6 +59,8 @@ import {
 const props = defineProps<{
   leaderboard: PartyLeaderboardEntry[];
   lightText: boolean;
+  // anti burn-in: the card moves to the opposite corner with the QR code
+  swapped: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -75,6 +74,11 @@ const MAX_ROWS = 5;
 const MEDALS = ["🥇", "🥈", "🥉"];
 
 const rows = computed(() => props.leaderboard.slice(0, MAX_ROWS));
+
+const cornerStyle = computed(() => ({
+  bottom: "calc(var(--party-player-bottom) + var(--party-tip-bar, 0px))",
+  [props.swapped ? "right" : "left"]: "var(--party-player-right)",
+}));
 
 const GAP_PX = 12;
 const card = useTemplateRef<HTMLElement>("card");

@@ -250,10 +250,7 @@
         </div>
 
         <!-- Track Stack or Empty State -->
-        <div
-          class="track-stack"
-          :style="swapped && !displayLyrics ? { order: -1 } : undefined"
-        >
+        <div class="track-stack" :style="swapped ? { order: -1 } : undefined">
           <!-- Empty State: with guest access, invite guests to pick the first song -->
           <div v-if="queueEmpty && qrAvailable" class="empty-state">
             <h2 class="empty-title">
@@ -312,6 +309,7 @@
       :light-text="useLightChrome"
       :request-badge-color="requestBadgeColor"
       :boost-badge-color="boostBadgeColor"
+      :swapped="swapped"
       @leaderboard-space="leaderboardSpace = $event"
     />
 

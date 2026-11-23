@@ -10,6 +10,7 @@
       v-if="config?.show_leaderboard"
       :leaderboard="leaderboard"
       :light-text="lightText"
+      :swapped="swapped"
       @space="emit('leaderboard-space', $event)"
     />
   </div>
@@ -28,6 +29,7 @@ const props = defineProps<{
   lightText: boolean;
   requestBadgeColor: string;
   boostBadgeColor: string;
+  swapped: boolean;
 }>();
 
 const emit = defineEmits<{
