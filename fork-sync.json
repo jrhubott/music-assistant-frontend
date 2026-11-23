@@ -8,7 +8,8 @@
       "strategy": "rebuild",
       "features": [
         "feature/party-kiosk-link",
-        "feature/party-enhancements"
+        "feature/party-enhancements",
+        "feature/party-host-controls"
       ],
       "rebase_features": [],
       "test_command": "pnpm install --frozen-lockfile --silent && pnpm test:run && pnpm exec vue-tsc --noEmit"
