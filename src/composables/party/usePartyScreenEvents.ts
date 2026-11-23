@@ -17,6 +17,7 @@ export interface PartyScreenEventHandlers {
   onGuestRequest?: (
     request: Extract<PartyProviderEvent, { event: "guest_request" }>,
   ) => void;
+  onHostMessage?: (message: string) => void;
 }
 
 export function usePartyScreenEvents(
@@ -48,6 +49,9 @@ export function usePartyScreenEvents(
         break;
       case "guest_request":
         handlers.onGuestRequest?.(data);
+        break;
+      case "host_message":
+        handlers.onHostMessage?.(data.message);
         break;
       case "leaderboard_updated":
         leaderboard.value = data.leaderboard;

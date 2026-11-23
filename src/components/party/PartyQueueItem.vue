@@ -6,7 +6,9 @@
       'queue-item-played': absoluteIndex < currentQueueIndex,
       'queue-item--expanded': isExpanded,
       'queue-item--clickable': canExpand,
+      'ring-2 ring-primary': isDropTarget,
     }"
+    :data-party-queue-index="absoluteIndex"
     @click="onItemClick"
   >
     <div class="queue-item-info">
@@ -31,6 +33,20 @@
           {{ subtitle }}
         </MarqueeText>
       </div>
+      <button
+        v-if="isHost && isUpcoming"
+        type="button"
+        class="shrink-0 cursor-grab touch-none p-2 opacity-70"
+        :aria-label="$t('providers.party.guest_page.host_drag')"
+        :title="$t('providers.party.guest_page.host_drag')"
+        @click.stop
+        @pointerdown.stop="drag.onPointerDown"
+        @pointermove="drag.onPointerMove"
+        @pointerup="drag.onPointerUp"
+        @pointercancel="drag.onPointerCancel"
+      >
+        <GripVertical :size="18" />
+      </button>
 
       <!-- Guest request badge -->
       <span
@@ -61,60 +77,28 @@
     </template>
 
     <!-- Host tools, enforced by the server -->
-    <div v-if="isExpanded && isHost" class="queue-item-actions flex-wrap">
-      <p v-if="shoutOut" class="w-full text-sm opacity-80">“{{ shoutOut }}”</p>
-      <Button
-        v-if="shoutOut"
-        size="sm"
-        variant="outline"
-        :disabled="hostBusy"
-        @click.stop="muteShoutOut(item.queue_item_id)"
-      >
-        <MessageSquareOff :size="16" />
-        {{ $t("providers.party.guest_page.host_mute") }}
-      </Button>
-      <Button
-        v-if="isUpcoming"
-        size="sm"
-        variant="outline"
-        :disabled="hostBusy"
-        @click.stop="removeItem(item.queue_item_id)"
-      >
-        <Trash2 :size="16" />
-        {{ $t("providers.party.guest_page.host_remove") }}
-      </Button>
-      <Button
-        v-if="item.extra_attributes?.party_guest_id"
-        size="sm"
-        variant="destructive"
-        :disabled="hostBusy"
-        @click.stop="blockGuest(item.queue_item_id)"
-      >
-        <Ban :size="16" />
-        {{ $t("providers.party.guest_page.host_block") }}
-      </Button>
-    </div>
+    <PartyHostItemActions
+      v-if="isExpanded && isHost"
+      :item="item"
+      :is-upcoming="isUpcoming"
+      :can-move-up="absoluteIndex > currentQueueIndex + 1"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import MarqueeText from "@/components/MarqueeText.vue";
 import NowPlayingBadge from "@/components/NowPlayingBadge.vue";
+import PartyHostItemActions from "@/components/party/PartyHostItemActions.vue";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import Spinner from "@/components/ui/spinner/Spinner.vue";
 import { usePartyHost } from "@/composables/party/usePartyHost";
+import { usePartyQueueDrag } from "@/composables/party/usePartyQueueDrag";
 import { getMediaItemImageUrl } from "@/helpers/utils";
 import type { QueueItem } from "@/plugins/api/interfaces";
 import { $t } from "@/plugins/i18n";
-import {
-  Ban,
-  MessageSquareOff,
-  Music,
-  Rocket,
-  Trash2,
-  UserRound,
-} from "@lucide/vue";
+import { GripVertical, Music, Rocket, UserRound } from "@lucide/vue";
 import Color from "color";
 import { computed } from "vue";
 
@@ -146,26 +130,23 @@ const boostDisabled = computed(
   () => props.rateLimitingEnabled && props.boostTokens <= 0,
 );
 
-const {
-  isHost,
-  busy: hostBusy,
-  removeItem,
-  muteShoutOut,
-  blockGuest,
-} = usePartyHost();
+const { isHost, moveItem } = usePartyHost();
+
+const drag = usePartyQueueDrag(
+  () => absoluteIndex.value,
+  () => props.currentQueueIndex + 1,
+  (posShift) => moveItem(props.item.queue_item_id, posShift),
+);
+const isDropTarget = computed(
+  () => drag.dropIndex.value === absoluteIndex.value,
+);
 
 const isUpcoming = computed(
   () => absoluteIndex.value > props.currentQueueIndex,
 );
 const shoutOut = computed(() => props.item.extra_attributes?.party_message);
-// a host can also reach the shout-out of the song that is playing
-const canExpand = computed(
-  () =>
-    isUpcoming.value ||
-    (isHost.value &&
-      absoluteIndex.value === props.currentQueueIndex &&
-      !!shoutOut.value),
-);
+// a host can also act on the song that is playing and on played songs
+const canExpand = computed(() => isUpcoming.value || isHost.value);
 
 const onItemClick = () => {
   if (canExpand.value) {

@@ -16,6 +16,32 @@ interface TokenBucket {
 const BOOST_STORAGE_KEY = "guest_boost_bucket";
 const ADD_QUEUE_STORAGE_KEY = "guest_add_queue_bucket";
 const SKIP_SONG_STORAGE_KEY = "guest_skip_song_bucket";
+const BONUS_STORAGE_KEY = "guest_bonus_tokens";
+const RESET_STORAGE_KEY = "guest_token_reset_id";
+
+type TokenKind = "boost" | "add" | "skip";
+type BonusTokens = Record<TokenKind, number>;
+
+export interface PartyGuestTokens {
+  granted: number;
+  reset_id: string | null;
+}
+
+const NO_BONUS: BonusTokens = { boost: 0, add: 0, skip: 0 };
+
+// Tokens from the host sit on top of the bucket, so a full bucket cannot cap them
+const loadBonus = (): BonusTokens => {
+  try {
+    const stored = localStorage.getItem(BONUS_STORAGE_KEY);
+    return stored ? { ...NO_BONUS, ...JSON.parse(stored) } : { ...NO_BONUS };
+  } catch {
+    return { ...NO_BONUS };
+  }
+};
+
+const saveBonus = (bonus: BonusTokens) => {
+  localStorage.setItem(BONUS_STORAGE_KEY, JSON.stringify(bonus));
+};
 
 export function useRateLimiting() {
   // Default values (will be overridden by server config)
@@ -97,15 +123,20 @@ export function useRateLimiting() {
     maxTokens: number,
     refillRate: number,
     tokenRef: Ref<number>,
+    kind: TokenKind,
   ): boolean => {
     const bucket = loadTokenBucket(storageKey, maxTokens, refillRate);
-    if (bucket.tokens <= 0) {
+    const bonus = loadBonus();
+    if (bucket.tokens > 0) {
+      bucket.tokens -= 1;
+      saveTokenBucket(storageKey, bucket);
+    } else if (bonus[kind] > 0) {
+      bonus[kind] -= 1;
+      saveBonus(bonus);
+    } else {
       return false;
     }
-
-    bucket.tokens -= 1;
-    saveTokenBucket(storageKey, bucket);
-    tokenRef.value = bucket.tokens;
+    tokenRef.value = bucket.tokens + bonus[kind];
     return true;
   };
 
@@ -136,13 +167,14 @@ export function useRateLimiting() {
   };
 
   const updateCountdown = () => {
+    const bonus = loadBonus();
     // Update Boost tokens
     const boostBucket = loadTokenBucket(
       BOOST_STORAGE_KEY,
       BOOST_MAX_TOKENS.value,
       BOOST_REFILL_RATE.value,
     );
-    boostTokens.value = boostBucket.tokens;
+    boostTokens.value = boostBucket.tokens + bonus.boost;
 
     if (boostBucket.tokens >= BOOST_MAX_TOKENS.value) {
       nextTokenCountdown.value = "";
@@ -159,7 +191,7 @@ export function useRateLimiting() {
       ADD_QUEUE_MAX_TOKENS.value,
       ADD_QUEUE_REFILL_RATE.value,
     );
-    addQueueTokens.value = addQueueBucket.tokens;
+    addQueueTokens.value = addQueueBucket.tokens + bonus.add;
 
     if (addQueueBucket.tokens >= ADD_QUEUE_MAX_TOKENS.value) {
       addQueueTokenCountdown.value = "";
@@ -177,7 +209,7 @@ export function useRateLimiting() {
       SKIP_SONG_MAX_TOKENS.value,
       SKIP_SONG_REFILL_RATE.value,
     );
-    skipSongTokens.value = skipBucket.tokens;
+    skipSongTokens.value = skipBucket.tokens + bonus.skip;
 
     if (skipBucket.tokens >= SKIP_SONG_MAX_TOKENS.value) {
       skipTokenCountdown.value = "";
@@ -198,6 +230,7 @@ export function useRateLimiting() {
       BOOST_MAX_TOKENS.value,
       BOOST_REFILL_RATE.value,
       boostTokens,
+      "boost",
     );
 
   const consumeAddQueueToken = (): boolean =>
@@ -206,6 +239,7 @@ export function useRateLimiting() {
       ADD_QUEUE_MAX_TOKENS.value,
       ADD_QUEUE_REFILL_RATE.value,
       addQueueTokens,
+      "add",
     );
 
   const consumeSkipSongToken = (): boolean =>
@@ -214,6 +248,7 @@ export function useRateLimiting() {
       SKIP_SONG_MAX_TOKENS.value,
       SKIP_SONG_REFILL_RATE.value,
       skipSongTokens,
+      "skip",
     );
 
   const getTimeUntilNextToken = (): number =>
@@ -236,6 +271,30 @@ export function useRateLimiting() {
       SKIP_SONG_MAX_TOKENS.value,
       SKIP_SONG_REFILL_RATE.value,
     );
+
+  /**
+   * Apply a token reset and extra tokens from the party host.
+   */
+  const applyHostTokens = (update: PartyGuestTokens) => {
+    if (
+      update.reset_id &&
+      localStorage.getItem(RESET_STORAGE_KEY) !== update.reset_id
+    ) {
+      localStorage.setItem(RESET_STORAGE_KEY, update.reset_id);
+      localStorage.removeItem(BOOST_STORAGE_KEY);
+      localStorage.removeItem(ADD_QUEUE_STORAGE_KEY);
+      localStorage.removeItem(SKIP_SONG_STORAGE_KEY);
+      localStorage.removeItem(BONUS_STORAGE_KEY);
+    }
+    if (update.granted > 0) {
+      const bonus = loadBonus();
+      bonus.boost += update.granted;
+      bonus.add += update.granted;
+      bonus.skip += update.granted;
+      saveBonus(bonus);
+    }
+    updateCountdown();
+  };
 
   /**
    * Apply server config to rate limiting parameters.
@@ -326,5 +385,6 @@ export function useRateLimiting() {
     getTimeUntilNextSkipToken,
     configure,
     startCountdown,
+    applyHostTokens,
   };
 }
