@@ -3,7 +3,7 @@
     <!-- Listen in (shared audio) -->
     <PartyListenIn />
 
-    <PartyHostMode />
+    <PartyHostMode :queue="currentQueue" />
 
     <!-- Nickname shown on the party screen with the guest's requests -->
     <PartyNickname />
@@ -67,9 +67,9 @@
           v-for="track in artistTracks"
           :key="`track-${track.item_id}`"
           :item="track"
-          :boost-enabled="boostEnabled"
-          :add-queue-enabled="addQueueEnabled"
-          :rate-limiting-enabled="rateLimitingEnabled"
+          :boost-enabled="boostEnabled || isHost"
+          :add-queue-enabled="addQueueEnabled || isHost"
+          :rate-limiting-enabled="rateLimitingEnabled && !isHost"
           :boost-tokens="boostTokens"
           :add-queue-tokens="addQueueTokens"
           :boost-badge-color="boostBadgeColor"
@@ -128,9 +128,9 @@
       <PartyShoutOut v-model="shoutOut" />
       <PartyResultItem
         :item="pickedTrack"
-        :boost-enabled="boostEnabled"
-        :add-queue-enabled="addQueueEnabled"
-        :rate-limiting-enabled="rateLimitingEnabled"
+        :boost-enabled="boostEnabled || isHost"
+        :add-queue-enabled="addQueueEnabled || isHost"
+        :rate-limiting-enabled="rateLimitingEnabled && !isHost"
         :boost-tokens="boostTokens"
         :add-queue-tokens="addQueueTokens"
         :boost-badge-color="boostBadgeColor"
@@ -190,6 +190,8 @@ import { Button } from "@/components/ui/button";
 import Spinner from "@/components/ui/spinner/Spinner.vue";
 import { useGuestArtistTracks } from "@/composables/guest/useGuestArtistTracks";
 import { useGuestQueue } from "@/composables/guest/useGuestQueue";
+import { usePartyGuestTokens } from "@/composables/party/usePartyGuestTokens";
+import { usePartyHost } from "@/composables/party/usePartyHost";
 import { usePartyNickname } from "@/composables/party/usePartyNickname";
 import { usePartyConfig } from "@/composables/usePartyConfig";
 import { useRateLimiting } from "@/composables/useRateLimiting";
@@ -246,6 +248,8 @@ const {
   getTimeUntilNextSkipToken,
 } = rateLimit;
 
+const { isHost, addToQueue: hostAddToQueue } = usePartyHost();
+const startHostTokenSync = usePartyGuestTokens(rateLimit);
 const { nickname } = usePartyNickname();
 // Shout-out for the next song this guest requests
 const shoutOut = ref("");
@@ -289,11 +293,14 @@ const onSearchSelect = (item: MediaItemTypeOrItemMapping) => {
   }
 };
 
+// a host may queue a song twice
 const queuedUris = computed(() =>
-  queuedGuestTrackUris(
-    queueItems.value,
-    partyConfig.value?.prevent_duplicate_tracks ?? true,
-  ),
+  isHost.value
+    ? new Set<string>()
+    : queuedGuestTrackUris(
+        queueItems.value,
+        partyConfig.value?.prevent_duplicate_tracks ?? true,
+      ),
 );
 
 // --- Template-specific state ---
@@ -346,7 +353,29 @@ const handleBack = () => {
 };
 
 // --- Action glue (bridges rate limiting + API + snackbar) ---
+const addAsHost = async (item: Track | Artist, position: "next" | "end") => {
+  const key = `${item.media_type}-${item.item_id}-${position}`;
+  if (addingItems.value.has(key)) return;
+  addingItems.value.add(key);
+  const result = await hostAddToQueue(item.uri, position === "next");
+  addingItems.value.delete(key);
+  if (result === "no_lyrics") {
+    toast.warning($t("providers.party.guest_page.no_lyrics", [item.name]));
+  } else if (result === "failed") {
+    toast.error($t("providers.party.guest_page.add_to_queue_failed"));
+  } else {
+    addedItems.value.add(item.uri);
+    toast.success(
+      $t("providers.party.guest_page.item_added_to_queue", [item.name]),
+    );
+  }
+};
+
 const addToQueue = async (item: Track | Artist, position: "next" | "end") => {
+  if (isHost.value) {
+    await addAsHost(item, position);
+    return;
+  }
   if (position === "next" && !boostEnabled.value) {
     toast.warning($t("providers.party.guest_page.boost_disabled"));
     return;
@@ -611,6 +640,8 @@ const fetchAndApplyConfig = async () => {
   }
 };
 
+let cleanupHostTokens: (() => void) | undefined;
+
 onMounted(async () => {
   await fetchAndApplyConfig();
   // Each await can outlast the view, and the unmount hook only reaches what
@@ -621,6 +652,7 @@ onMounted(async () => {
   window.addEventListener("popstate", handleBack);
 
   cleanupCountdown = rateLimit.startCountdown();
+  cleanupHostTokens = startHostTokenSync();
 
   await refreshPartyPlayer();
   if (unmounted) return;
@@ -659,6 +691,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("popstate", handleBack);
   cleanupQueueEvents?.();
   cleanupCountdown?.();
+  cleanupHostTokens?.();
   cleanupProvidersSub?.();
   cleanupQueueUpdatedSub?.();
 });

@@ -2522,6 +2522,8 @@ export interface PartyLeaderboardEntry {
 export type PartyProviderEvent =
   | { event: "reaction"; emoji: string }
   | { event: "leaderboard_updated"; leaderboard: PartyLeaderboardEntry[] }
+  | { event: "host_message"; message: string }
+  | { event: "tokens_updated" }
   | {
       event: "guest_request";
       queue_item_id: string;

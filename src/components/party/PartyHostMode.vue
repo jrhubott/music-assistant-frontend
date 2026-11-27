@@ -9,19 +9,21 @@
       $t("providers.party.guest_page.host_active")
     }}</span>
     <Button
-      v-if="status.blocked_count > 0"
       variant="ghost"
       size="sm"
-      :disabled="busy"
-      @click="unblockAll"
+      :aria-expanded="panelOpen"
+      @click="panelOpen = !panelOpen"
     >
       {{
-        $t("providers.party.guest_page.host_unblock", [status.blocked_count])
+        panelOpen
+          ? $t("providers.party.guest_page.host_hide_controls")
+          : $t("providers.party.guest_page.host_show_controls")
       }}
     </Button>
     <Button variant="ghost" size="sm" :disabled="busy" @click="lock">
       {{ $t("providers.party.guest_page.host_leave") }}
     </Button>
+    <PartyHostPanel v-if="panelOpen" :queue="queue" class="w-full" />
   </section>
   <form
     v-else-if="status.enabled && showForm"
@@ -52,18 +54,23 @@
 </template>
 
 <script setup lang="ts">
+import PartyHostPanel from "@/components/party/PartyHostPanel.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePartyHost } from "@/composables/party/usePartyHost";
 import { usePartyConfig } from "@/composables/usePartyConfig";
+import type { PlayerQueue } from "@/plugins/api/interfaces";
 import { $t } from "@/plugins/i18n";
 import { Shield, ShieldCheck } from "@lucide/vue";
 import { ref, watch } from "vue";
 
+defineProps<{ queue: PlayerQueue | null | undefined }>();
+
 const { config } = usePartyConfig();
-const { status, busy, refresh, unlock, lock, unblockAll } = usePartyHost();
+const { status, busy, refresh, unlock, lock } = usePartyHost();
 
 const showForm = ref(false);
+const panelOpen = ref(false);
 const pin = ref("");
 
 const closeForm = () => {
