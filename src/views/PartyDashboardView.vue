@@ -1,5 +1,8 @@
 <template>
-  <div class="party-view" :style="gradientBackgroundStyle">
+  <div
+    :class="['party-view', { 'party-view--tips': showTipBar }]"
+    :style="gradientBackgroundStyle"
+  >
     <!-- MilkDrop visualizer takes over the backdrop when enabled -->
     <VisualizerCanvas
       v-if="visualizerActive"
@@ -40,6 +43,7 @@
           'party-content--light-text': useLightChrome,
         },
       ]"
+      :style="{ '--party-leaderboard-space': `${leaderboardSpace}px` }"
     >
       <!-- Topbar -->
       <div
@@ -98,7 +102,7 @@
 
           <!-- Fullscreen: minimize button -->
           <Button
-            v-if="isFullscreen && !hideBackButton"
+            v-if="showMinimizeButton"
             variant="ghost-icon"
             size="icon-sm"
             :aria-label="$t('tooltip.exit_fullscreen')"
@@ -121,6 +125,7 @@
             </Button>
             <ShowDashboardButton dashboard="party" />
             <Button
+              v-if="!antiBurnIn"
               variant="ghost-icon"
               size="icon-sm"
               :aria-label="$t('tooltip.enter_fullscreen')"
@@ -165,17 +170,21 @@
             :lrc-lyrics="currentLyrics.synced"
             :anticipation="10"
             :highlight-ahead="highlightAhead"
+            :offset="lyricsOffset"
+            :word-highlight="wordHighlight"
+            break-cue
           />
         </div>
 
         <div class="karaoke-track-stack">
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state empty-state--karaoke"
-          >
+          <div v-if="queueEmpty" class="empty-state empty-state--karaoke">
             <Music :size="60" class="empty-icon" />
             <h2 class="empty-title">
-              {{ $t("providers.party.nothing_playing") }}
+              {{
+                qrAvailable
+                  ? $t("providers.party.empty_queue_message")
+                  : $t("providers.party.nothing_playing")
+              }}
             </h2>
           </div>
           <TransitionGroup
@@ -202,7 +211,7 @@
       <template v-else>
         <!-- QR Code and Lyrics -->
         <div
-          v-show="qrAvailable || displayLyrics"
+          v-show="(qrAvailable && !queueEmpty) || displayLyrics"
           :class="[
             'qr-section',
             {
@@ -232,21 +241,32 @@
               :lyrics="currentLyrics.plain"
               :lrc-lyrics="currentLyrics.synced"
               :highlight-ahead="highlightAhead"
+              :offset="lyricsOffset"
               :text-color="lyricsTextColor"
+              :word-highlight="wordHighlight"
+              break-cue
             />
           </div>
         </div>
 
         <!-- Track Stack or Empty State -->
-        <div
-          class="track-stack"
-          :style="swapped && !displayLyrics ? { order: -1 } : undefined"
-        >
-          <!-- Empty State -->
-          <div
-            v-if="!store.curQueueItem && !visibleItems.length"
-            class="empty-state"
-          >
+        <div class="track-stack" :style="swapped ? { order: -1 } : undefined">
+          <!-- Empty State: with guest access, invite guests to pick the first song -->
+          <div v-if="queueEmpty && qrAvailable" class="empty-state">
+            <h2 class="empty-title">
+              {{ $t("providers.party.empty_queue_title") }}
+            </h2>
+            <p class="empty-message">
+              {{ $t("providers.party.empty_queue_message") }}
+            </p>
+            <div class="empty-qr">
+              <PartyQR
+                :qr-dark="qrDarkColor"
+                @available="qrAvailable = $event"
+              />
+            </div>
+          </div>
+          <div v-else-if="queueEmpty" class="empty-state">
             <Music :size="120" class="empty-icon" />
             <h2 class="empty-title">
               {{ $t("providers.party.nothing_playing") }}
@@ -277,17 +297,21 @@
         </div>
       </template>
     </div>
-    <div
-      class="absolute flex items-center gap-2 opacity-50 font-medium"
-      :style="{
-        color: chromeTextColor,
-        bottom: 'var(--party-player-bottom)',
-        right: 'var(--party-player-right)',
-      }"
-    >
-      <span>{{ $t("providers.party.powered_by") }}</span>
-      <img :src="maLogoSrc" alt="Music Assistant" class="h-5 w-auto" />
-    </div>
+    <PartyTipCaption
+      v-if="showTipBar"
+      :tips="tips"
+      :light-text="useLightChrome"
+    />
+    <!-- Reactions, request animations and the leaderboard -->
+    <PartyScreenExtras
+      v-if="!accessError"
+      :party-instance-id="partyInstanceId"
+      :light-text="useLightChrome"
+      :request-badge-color="requestBadgeColor"
+      :boost-badge-color="boostBadgeColor"
+      :swapped="swapped"
+      @leaderboard-space="leaderboardSpace = $event"
+    />
 
     <!-- Guest Access Toggle Dialog -->
     <AlertDialog v-model:open="showGuestAccessDialog">
@@ -327,6 +351,8 @@
 import ShowDashboardButton from "@/components/ShowDashboardButton.vue";
 import LyricsViewer from "@/components/LyricsViewer.vue";
 import PartyQR from "@/components/party/PartyQR.vue";
+import PartyTipCaption from "@/components/party/PartyTipCaption.vue";
+import PartyScreenExtras from "@/components/party/PartyScreenExtras.vue";
 import VisualizerCanvas from "@/components/VisualizerCanvas.vue";
 import PartyTrackCard from "@/components/party/PartyTrackCard.vue";
 import {
@@ -343,6 +369,7 @@ import { Button } from "@/components/ui/button";
 import { useLyricsElapsedTime } from "@/composables/lyrics/useLyricsElapsedTime";
 import { usePartyConfig } from "@/composables/usePartyConfig";
 import { useVisualizer } from "@/composables/visualizer/useVisualizer";
+import { partyTips } from "@/helpers/party_tips";
 import {
   ImageColorPalette,
   getMediaItemImage,
@@ -378,9 +405,6 @@ import { useRouter } from "vue-router";
 
 const router = useRouter();
 const { config: partyConfig, fetchConfig } = usePartyConfig();
-const logoSrc = new URL("@/assets/logo/logo.svg", import.meta.url).href;
-const logoDarkSrc = new URL("@/assets/logo/logo-dark.svg", import.meta.url)
-  .href;
 
 // Set by the unmount hook, so the async work below can tell that the view it
 // belongs to is gone before it acts on a result.
@@ -402,11 +426,20 @@ const refreshPartyPlayer = async () => {
 
 const qrAvailable = ref(true); // Optimistic default; PartyQR emits false if guest access disabled
 const displayLyrics = computed(() => karaokeMode.value); // Lyrics shown whenever karaoke mode is on
+const leaderboardSpace = ref(0); // px the corner leaderboard takes from the bottom
 const karaokeMode = ref(false); // Whether karaoke mode layout is active
 const highlightAhead = ref(true); // Whether lyric highlight finishes at LRC time
-const antiBurnIn = ref(false); // Swap QR/track sides periodically
+const wordHighlight = computed(() => partyConfig.value?.word_highlight ?? true);
+// The configured lyrics delay, in milliseconds, holds the lyrics back to match
+// speakers that play late; LyricsViewer takes it as a seconds offset forward.
+const MS_PER_SECOND = 1000;
+const lyricsOffset = computed(() => {
+  const delayMs = partyConfig.value?.lyrics_delay ?? 0;
+  return delayMs ? -delayMs / MS_PER_SECOND : 0;
+});
+const antiBurnIn = ref(false); // Swap QR/track sides between songs
 const swapped = ref(false); // Current swap state for anti burn-in
-let burnInInterval: ReturnType<typeof setInterval> | null = null;
+let lastBurnInSwap = 0;
 const accessError = ref("");
 const showGuestAccessDialog = ref(false);
 const guestAccessSaving = ref(false);
@@ -442,6 +475,9 @@ const toggleGuestAccess = async () => {
 const requestBadgeColor = ref("");
 const boostBadgeColor = ref("");
 const isFullscreen = computed(() => store.frameless);
+const showMinimizeButton = computed(
+  () => isFullscreen.value && !hideBackButton.value && !antiBurnIn.value,
+);
 const colorMode = useColorMode();
 const isDark = computed(() => colorMode.value === "dark");
 const darkBackground = computed(
@@ -460,9 +496,6 @@ const useLightChrome = computed(
 );
 const chromeTextColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "rgba(var(--v-theme-on-surface), 0.9)",
-);
-const maLogoSrc = computed(() =>
-  useLightChrome.value ? logoSrc : logoDarkSrc,
 );
 const qrDarkColor = computed(() =>
   useLightChrome.value ? "#FFFFFF" : "#000000",
@@ -630,6 +663,14 @@ const visibleItems = computed(() => {
 
   return items;
 });
+
+const queueEmpty = computed(
+  () => !store.curQueueItem && !visibleItems.value.length,
+);
+const tips = computed(() =>
+  partyTips(partyConfig.value, qrAvailable.value, queueEmpty.value),
+);
+const showTipBar = computed(() => !accessError.value && tips.value.length > 0);
 
 // Helper to compute position for each item
 const getPosition = (item: QueueItem) => {
@@ -810,27 +851,28 @@ const handleVisibilityChange = () => {
 };
 
 // Lifecycle and event subscriptions
-const BURN_IN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
+const BURN_IN_MIN_SWAP_MS = 10 * 60 * 1000; // 10 minutes
 
 // onMounted subscribes after its awaits, where the component is no longer the
 // active instance and onBeforeUnmount would be a no-op, so the subscriptions
 // are collected here for the unmount hook registered at setup level.
 const unsubscribers: Array<() => void> = [];
 
-watch(antiBurnIn, (enabled) => {
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
-  }
-  if (enabled) {
-    swapped.value = false;
-    burnInInterval = setInterval(() => {
-      swapped.value = !swapped.value;
-    }, BURN_IN_SWAP_MS);
-  } else {
-    swapped.value = false;
-  }
+watch(antiBurnIn, () => {
+  swapped.value = false;
+  lastBurnInSwap = Date.now();
 });
+
+// Moving the layout mid-song would pull the lyrics away from whoever is singing.
+watch(
+  () => store.curQueueItem?.queue_item_id,
+  (queueItemId) => {
+    if (!antiBurnIn.value || !queueItemId) return;
+    if (Date.now() - lastBurnInSwap < BURN_IN_MIN_SWAP_MS) return;
+    swapped.value = !swapped.value;
+    lastBurnInSwap = Date.now();
+  },
+);
 
 onMounted(async () => {
   // Registered before the first await, so that leaving the view while one is
@@ -921,10 +963,6 @@ onBeforeUnmount(() => {
     wakeLock.release();
     wakeLock = null;
   }
-  if (burnInInterval) {
-    clearInterval(burnInInterval);
-    burnInInterval = null;
-  }
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 
@@ -1001,6 +1039,21 @@ watch(
   transition: background-image 0.8s ease-in-out;
 }
 
+.party-view--tips {
+  --party-tip-bar: clamp(2.25rem, 5vh, 4.5rem);
+  --party-bottom-reserve: calc(
+    var(--party-player-bottom, 0px) + var(--party-tip-bar) + 1vh
+  );
+}
+
+.party-view--tips .party-content {
+  padding-bottom: var(--party-bottom-reserve);
+}
+
+.party-view--tips .karaoke-track-stack {
+  padding-bottom: 0;
+}
+
 .party-content--album-art,
 .party-content--album-art *,
 .party-content--light-text,
@@ -1027,14 +1080,24 @@ watch(
   justify-content: center;
   align-self: center;
   height: 60vh;
+  /* keep the QR clear of the leaderboard in the corner below; the content
+     padding already covers the part of that space taken by the tip bar */
+  --party-qr-clearance: max(
+    0px,
+    var(--party-leaderboard-space, 0px) - var(--party-bottom-reserve, 0px)
+  );
+  max-height: calc(100% - var(--party-qr-clearance));
+  margin-bottom: var(--party-qr-clearance);
 }
 
 .qr-wrapper {
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.5vh;
 }
 
 .qr-section--with-lyrics {
@@ -1117,6 +1180,12 @@ watch(
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
+.empty-qr {
+  width: min(70vh, 90%);
+  height: 55vh;
+  margin-top: 1vh;
+}
+
 .empty-message {
   font-size: 1.25rem;
   color: rgba(var(--v-theme-on-surface), 0.7);
@@ -1148,6 +1217,10 @@ watch(
   left: 2vw;
   z-index: 6;
   max-width: 20vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
 }
 
 .karaoke-qr :deep(.qr-display) {
@@ -1414,7 +1487,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding-bottom: 0 !important;
-  /* total bottom offset for overlays (here, "Powered by"): the bars pinned to
+  /* total bottom offset for overlays (here, the leaderboard): the bars pinned to
      the bottom of the screen + tailwind spacing-1 gap */
   --party-player-bottom: calc(var(--bottom-bars-height) + 4px);
   /* the player bar runs the full width here, so there is no edge to line up

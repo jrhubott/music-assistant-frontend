@@ -11,11 +11,10 @@
         '--qr-color': props.qrDark,
       }"
     >
-      <button
-        type="button"
-        class="qr-link"
-        :aria-label="$t('providers.party.copy_link')"
-        @click="copyUrlToClipboard"
+      <component
+        :is="showCopyLink ? 'button' : 'div'"
+        v-bind="qrCopyAttrs"
+        :class="{ 'qr-link': showCopyLink }"
       >
         <svg
           class="qr-code"
@@ -38,7 +37,7 @@
             {{ copyFeedback }}
           </div>
         </Transition>
-      </button>
+      </component>
       <p
         v-if="qrText"
         :style="{ width: qrSize + 'px', textAlign: 'center' }"
@@ -47,6 +46,7 @@
         {{ qrText }}
       </p>
       <InvitationShareActions
+        v-if="showCopyLink"
         ref="shareActions"
         class="qr-actions"
         variant="ghost-outline"
@@ -97,6 +97,16 @@ const { config: partyConfig } = usePartyConfig();
 const qrText = computed(
   () =>
     partyConfig.value?.qr_text?.trim() || $t("providers.party.qr_default_text"),
+);
+const showCopyLink = computed(() => partyConfig.value?.show_copy_link ?? true);
+const qrCopyAttrs = computed(() =>
+  showCopyLink.value
+    ? {
+        type: "button",
+        "aria-label": $t("providers.party.copy_link"),
+        onClick: copyUrlToClipboard,
+      }
+    : {},
 );
 const shareTitle = computed(() => {
   const partyName = partyConfig.value?.party_name?.trim();
