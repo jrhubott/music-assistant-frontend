@@ -3,6 +3,11 @@
     <!-- Listen in (shared audio) -->
     <PartyListenIn />
 
+    <PartyHostMode />
+
+    <!-- Nickname shown on the party screen with the guest's requests -->
+    <PartyNickname />
+
     <!-- Search: same dropdown experience as the quiz setup; picking a track
          shows it below with the boost/request actions, picking an artist
          drills into that artist's tracks -->
@@ -50,6 +55,7 @@
           />
         </div>
       </div>
+      <PartyShoutOut v-model="shoutOut" />
       <!-- Loading state -->
       <div v-if="loadingArtistTracks" class="loading-state">
         <Spinner class="size-12 text-primary" />
@@ -119,6 +125,7 @@
           />
         </div>
       </div>
+      <PartyShoutOut v-model="shoutOut" />
       <PartyResultItem
         :item="pickedTrack"
         :boost-enabled="boostEnabled"
@@ -163,19 +170,27 @@
       @queue-scroll="handleQueueScroll"
       @boost-queue-item="boostQueueItem"
     />
+
+    <!-- Reactions that float up the party screen -->
+    <PartyReactionBar />
   </div>
 </template>
 
 <script setup lang="ts">
 import MediaSearch from "@/components/MediaSearch.vue";
+import PartyHostMode from "@/components/party/PartyHostMode.vue";
 import PartyListenIn from "@/components/party/PartyListenIn.vue";
+import PartyNickname from "@/components/party/PartyNickname.vue";
+import PartyReactionBar from "@/components/party/PartyReactionBar.vue";
 import PartyQueueSection from "@/components/party/PartyQueueSection.vue";
 import PartyResultItem from "@/components/party/PartyResultItem.vue";
+import PartyShoutOut from "@/components/party/PartyShoutOut.vue";
 import PartyTokensBadge from "@/components/party/PartyTokensBadge.vue";
 import { Button } from "@/components/ui/button";
 import Spinner from "@/components/ui/spinner/Spinner.vue";
 import { useGuestArtistTracks } from "@/composables/guest/useGuestArtistTracks";
 import { useGuestQueue } from "@/composables/guest/useGuestQueue";
+import { usePartyNickname } from "@/composables/party/usePartyNickname";
 import { usePartyConfig } from "@/composables/usePartyConfig";
 import { useRateLimiting } from "@/composables/useRateLimiting";
 import { queuedGuestTrackUris } from "@/helpers/queue_position";
@@ -202,6 +217,9 @@ import {
 } from "vue";
 import { toast } from "vue-sonner";
 
+// Sent by the server when the party only plays songs with lyrics
+const REASON_NO_LYRICS = "no_lyrics";
+
 // --- Composables ---
 const { config: partyConfig, fetchConfig } = usePartyConfig();
 const rateLimit = useRateLimiting();
@@ -227,6 +245,10 @@ const {
   getTimeUntilNextAddQueueToken,
   getTimeUntilNextSkipToken,
 } = rateLimit;
+
+const { nickname } = usePartyNickname();
+// Shout-out for the next song this guest requests
+const shoutOut = ref("");
 
 const queue = useGuestQueue();
 const {
@@ -363,8 +385,19 @@ const addToQueue = async (item: Track | Artist, position: "next" | "end") => {
     const result = (await api.sendCommand("party/add_to_queue", {
       uri: item.uri,
       boost: position === "next",
-    })) as { success: boolean; boosted: boolean; started_playback: boolean };
+      guest_name: nickname.value || undefined,
+      message: shoutOut.value || undefined,
+    })) as {
+      success: boolean;
+      reason?: string;
+      boosted: boolean;
+      started_playback: boolean;
+    };
 
+    if (result.reason === REASON_NO_LYRICS) {
+      toast.warning($t("providers.party.guest_page.no_lyrics", [item.name]));
+      return;
+    }
     if (!result.success) {
       throw new Error("Server rejected the request");
     }
@@ -378,6 +411,7 @@ const addToQueue = async (item: Track | Artist, position: "next" | "end") => {
     }
 
     addedItems.value.add(item.uri);
+    shoutOut.value = "";
 
     const message =
       position === "next"
@@ -411,8 +445,17 @@ const boostQueueItem = async (item: QueueItem) => {
   try {
     const result = (await api.sendCommand("party/boost_queue_item", {
       queue_item_id: item.queue_item_id,
-    })) as { success: boolean };
+      guest_name: nickname.value || undefined,
+    })) as { success: boolean; reason?: string };
 
+    if (result.reason === REASON_NO_LYRICS) {
+      toast.warning(
+        $t("providers.party.guest_page.no_lyrics", [
+          item.media_item?.name || item.name,
+        ]),
+      );
+      return;
+    }
     if (!result.success) {
       throw new Error("Server rejected the request");
     }

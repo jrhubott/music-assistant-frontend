@@ -1576,6 +1576,9 @@ export interface QueueItem {
     party_guest?: boolean; // true if added by party guest
     party_boosted?: boolean; // true if added as "boost" (play next)
     party_skip_votes?: number; // guests that voted to skip this (currently playing) item
+    party_guest_name?: string; // nickname of the guest that requested this item
+    party_message?: string; // shout-out the guest attached to the request
+    party_guest_id?: string; // opaque key of the requesting guest device
     playback_speed?: number; // current playback speed multiplier (audiobook/podcast)
   };
 }
@@ -2484,6 +2487,9 @@ export interface PartyConfig {
   skip_votes_required: number;
   karaoke_mode: boolean;
   highlight_ahead: boolean;
+  // Milliseconds the dashboard lyrics are held back to match speakers that play late
+  lyrics_delay: number;
+  word_highlight: boolean;
   request_badge_color?: string;
   boost_badge_color?: string;
   anti_burn_in: boolean;
@@ -2494,7 +2500,38 @@ export interface PartyConfig {
   prevent_duplicate_tracks: boolean;
   // Shared-audio experience for guests: "venue" (opt-in) or "remote" (silent disco).
   mode?: "venue" | "remote";
+  // Guest identity and interaction
+  enable_guest_names: boolean;
+  enable_shout_outs: boolean;
+  enable_reactions: boolean;
+  reactions: string[];
+  // Party screen extras
+  show_leaderboard: boolean;
+  show_skip_meter: boolean;
+  show_request_animations: boolean;
+  show_tips: boolean;
+  show_copy_link: boolean;
+  host_controls_enabled?: boolean;
 }
+
+export interface PartyLeaderboardEntry {
+  name: string;
+  requests: number;
+  boosts: number;
+  score: number;
+}
+
+// Payloads of the PROVIDER_EVENT events the party provider sends
+export type PartyProviderEvent =
+  | { event: "reaction"; emoji: string }
+  | { event: "leaderboard_updated"; leaderboard: PartyLeaderboardEntry[] }
+  | {
+      event: "guest_request";
+      queue_item_id: string;
+      title: string;
+      name: string | null;
+      boosted: boolean;
+    };
 
 export interface SmartPlaylistRules {
   genre_ids: number[];

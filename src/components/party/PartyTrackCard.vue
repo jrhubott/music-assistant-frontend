@@ -28,6 +28,23 @@
           {{ artistName }}
         </MarqueeText>
       </div>
+      <div v-if="guestName" class="track-requester">
+        <UserRound class="requester-icon" aria-hidden="true" />
+        <span class="truncate">
+          {{ $t("providers.party.requested_by", [guestName]) }}
+        </span>
+      </div>
+      <blockquote
+        v-if="shoutOut && position === 'current'"
+        class="shout-out"
+        :style="guestBadgeStyle"
+      >
+        <MessageSquareQuote
+          class="requester-icon shrink-0"
+          aria-hidden="true"
+        />
+        <span>{{ shoutOut }}</span>
+      </blockquote>
     </div>
     <!-- Progress bar for current playing track -->
     <div
@@ -54,9 +71,15 @@
         <UserRound v-else class="badge-icon" />
         <span v-if="position === 'current'">{{ badgeText }}</span>
       </div>
-      <!-- Skip vote progress for the current track -->
+      <!-- Skip vote meter for the current track -->
+      <PartySkipMeter
+        v-if="showSkipVotes && showSkipMeter"
+        :votes="skipVotes"
+        :votes-required="skipVotesRequired"
+      />
+      <!-- Skip vote tally for the current track -->
       <div
-        v-if="showSkipVotes"
+        v-else-if="showSkipVotes"
         :class="
           cn(
             'flex items-center gap-[0.6vh] rounded-full border border-destructive/50 bg-destructive/30 px-[1.2vh] py-[0.5vh] text-[clamp(0.65rem,1.2vh,1.1rem)] font-semibold uppercase tracking-[0.5px] text-foreground/90 tabular-nums',
@@ -75,12 +98,18 @@
 import MarqueeText from "@/components/MarqueeText.vue";
 import MediaItemThumb from "@/components/MediaItemThumb.vue";
 import NowPlayingBadge from "@/components/NowPlayingBadge.vue";
+import PartySkipMeter from "@/components/party/PartySkipMeter.vue";
 import { usePartyConfig } from "@/composables/usePartyConfig";
 import { resolveActiveElapsedTime } from "@/helpers/activeElapsedTime";
 import { cn } from "@/lib/utils";
 import type { QueueItem } from "@/plugins/api/interfaces";
 import { $t } from "@/plugins/i18n";
-import { Rocket, SkipForward, UserRound } from "@lucide/vue";
+import {
+  MessageSquareQuote,
+  Rocket,
+  SkipForward,
+  UserRound,
+} from "@lucide/vue";
 import Color from "color";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
@@ -207,6 +236,23 @@ const showSkipVotes = computed(
     (partyConfig.value?.enable_skip_song ?? false) &&
     skipVotesRequired.value > 1 &&
     skipVotes.value > 0,
+);
+
+const showSkipMeter = computed(
+  () => partyConfig.value?.show_skip_meter ?? false,
+);
+
+// Shown only while the party lets guests use a nickname or shout-out, so turning
+// the option off takes them off the screen right away
+const guestName = computed(() =>
+  partyConfig.value?.enable_guest_names
+    ? props.queueItem?.extra_attributes?.party_guest_name
+    : undefined,
+);
+const shoutOut = computed(() =>
+  partyConfig.value?.enable_shout_outs
+    ? props.queueItem?.extra_attributes?.party_message
+    : undefined,
 );
 
 const skipVotesText = computed(() =>
@@ -463,6 +509,46 @@ watch(
 
 .white-text .track-artist {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.track-requester {
+  display: flex;
+  align-items: center;
+  gap: 0.6vh;
+  margin-top: 0.4em;
+  font-size: clamp(0.9rem, 1.8vh, 1.8rem);
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+}
+
+.white-text .track-requester {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.requester-icon {
+  width: clamp(14px, 1.8vh, 26px);
+  height: clamp(14px, 1.8vh, 26px);
+}
+
+.shout-out {
+  display: flex;
+  align-items: center;
+  gap: 0.8vh;
+  margin: 0.8vh 0 0;
+  padding: 0.6vh 1.2vh;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 1vh;
+  border: 1px solid var(--badge-border);
+  background: var(--badge-background);
+  font-size: clamp(1rem, 2.2vh, 2.2rem);
+  font-style: italic;
+  color: rgba(var(--v-theme-on-surface), 0.95);
+  overflow-wrap: anywhere;
+}
+
+.white-text .shout-out {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .progress-bar {
