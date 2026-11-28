@@ -6,6 +6,7 @@
       :request-badge-color="requestBadgeColor"
       :boost-badge-color="boostBadgeColor"
     />
+    <PartyHostMessage ref="hostMessage" />
     <PartyLeaderboard
       v-if="config?.show_leaderboard"
       :leaderboard="leaderboard"
@@ -17,6 +18,7 @@
 </template>
 
 <script setup lang="ts">
+import PartyHostMessage from "@/components/party/PartyHostMessage.vue";
 import PartyLeaderboard from "@/components/party/PartyLeaderboard.vue";
 import PartyReactionLayer from "@/components/party/PartyReactionLayer.vue";
 import PartyRequestBanner from "@/components/party/PartyRequestBanner.vue";
@@ -39,6 +41,7 @@ const emit = defineEmits<{
 const { config } = usePartyConfig();
 const reactionLayer = useTemplateRef("reactionLayer");
 const requestBanner = useTemplateRef("requestBanner");
+const hostMessage = useTemplateRef("hostMessage");
 
 const { leaderboard } = usePartyScreenEvents(toRef(props, "partyInstanceId"), {
   onReaction: (emoji) => {
@@ -49,5 +52,6 @@ const { leaderboard } = usePartyScreenEvents(toRef(props, "partyInstanceId"), {
       requestBanner.value?.announce(request);
     }
   },
+  onHostMessage: (message) => hostMessage.value?.show(message),
 });
 </script>

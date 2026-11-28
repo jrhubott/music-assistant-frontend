@@ -5,7 +5,12 @@ import type { QueueItem } from "@/plugins/api/interfaces";
 import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/plugins/api", () => ({ default: { sendCommand: vi.fn() } }));
+vi.mock("@/plugins/api", () => ({
+  default: { sendCommand: vi.fn(), subscribe: vi.fn(() => vi.fn()) },
+}));
+vi.mock("@/plugins/store", () => ({
+  store: { enabledPlugins: new Set<string>() },
+}));
 vi.mock("@/plugins/i18n", () => ({ $t: (key: string) => key }));
 vi.mock("vue-sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -48,6 +53,7 @@ const setHost = (isHost: boolean) => {
     is_host: isHost,
     retry_after: 0,
     blocked_count: 0,
+    blocked_guests: [],
   };
 };
 
@@ -85,6 +91,29 @@ describe("party host tools on a queue item", () => {
     await button?.trigger("click");
     expect(api.sendCommand).toHaveBeenCalledWith("party/host_remove_item", {
       queue_item_id: "song",
+    });
+  });
+
+  it("offers play now and queue moves on an upcoming song", () => {
+    setHost(true);
+    const text = mountItem(2).text();
+    expect(text).toContain("providers.party.guest_page.host_play_now");
+    expect(text).toContain("providers.party.guest_page.host_play_next");
+    expect(text).toContain("providers.party.guest_page.host_add_tokens");
+  });
+
+  it("gives the guest of the song extra tokens", async () => {
+    setHost(true);
+    vi.mocked(api.sendCommand).mockResolvedValue({ is_host: true });
+    const button = mountItem(2)
+      .findAll("button")
+      .find((candidate) =>
+        candidate.text().includes("providers.party.guest_page.host_add_tokens"),
+      );
+    await button?.trigger("click");
+    expect(api.sendCommand).toHaveBeenCalledWith("party/host_grant_tokens", {
+      guest_id: "guest",
+      amount: 1,
     });
   });
 });
